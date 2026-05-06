@@ -1,13 +1,13 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { supabaseAdmin } from "../lib/supabase.js";
-import { buildDeck, canPlay, genRoomCode, type Card } from "../lib/game.js";
+import { store } from "../lib/store.js";
+import { buildDeck, canPlay, genRoomCode, type Card, type GameRow } from "../lib/game.js";
 import { HAND_SIZE, drawCards, loadGame, nextTurn, persist, suitSym } from "../lib/engine.js";
 
 export const games = new Hono();
 
 const playerSchema = z.object({
-  id: z.string().uuid(),
+  id: z.string().min(1).max(64),
   name: z.string().min(1).max(24),
   avatar: z.string().min(1).max(8),
 });
@@ -17,21 +17,35 @@ async function parseJson<T extends z.ZodTypeAny>(c: any, schema: T): Promise<z.i
   return schema.parse(raw);
 }
 
+function newGame(code: string, hostId: string, host: z.infer<typeof playerSchema>): GameRow {
+  return {
+    id: store.newId(),
+    code,
+    host_id: hostId,
+    status: "lobby",
+    players: [host],
+    spectators: [],
+    hands: {},
+    deck: [],
+    discard: [],
+    current_suit: null,
+    current_turn: null,
+    direction: 1,
+    draw_count: 0,
+    pending_draw_rank: null,
+    last_action: null,
+    winner_id: null,
+    updated_at: new Date().toISOString(),
+  };
+}
+
 games.post("/create", async (c) => {
   const { player } = await parseJson(c, z.object({ player: playerSchema }));
   let code = genRoomCode();
-  for (let i = 0; i < 5; i++) {
-    const { data: existing } = await supabaseAdmin.from("games").select("id").eq("code", code).maybeSingle();
-    if (!existing) break;
-    code = genRoomCode();
-  }
-  const { data: row, error } = await supabaseAdmin
-    .from("games")
-    .insert({ code, host_id: player.id, status: "lobby", players: [player] as never })
-    .select("*")
-    .single();
-  if (error) return c.json({ error: error.message }, 400);
-  return c.json({ id: (row as any).id, code });
+  for (let i = 0; i < 5 && store.findByCode(code); i++) code = genRoomCode();
+  const g = newGame(code, player.id, player);
+  store.put(g);
+  return c.json({ id: g.id, code });
 });
 
 games.post("/join", async (c) => {
@@ -39,27 +53,24 @@ games.post("/join", async (c) => {
     c,
     z.object({ code: z.string().min(3).max(8), player: playerSchema }),
   );
-  const upper = code.toUpperCase().trim();
-  const { data: game, error } = await supabaseAdmin.from("games").select("*").eq("code", upper).maybeSingle();
-  if (error || !game) return c.json({ error: "Room not found" }, 404);
-  const g = game as any;
-  if (g.players.some((p: any) => p.id === player.id)) return c.json({ id: g.id, role: "player" });
+  const g = store.findByCode(code.trim());
+  if (!g) return c.json({ error: "Room not found" }, 404);
+  if (g.players.some((p) => p.id === player.id)) return c.json({ id: g.id, role: "player" });
   if (g.status === "lobby") {
     if (g.players.length >= 6) return c.json({ error: "Room is full" }, 400);
     g.players.push(player);
-    await supabaseAdmin.from("games").update({ players: g.players, updated_at: new Date().toISOString() }).eq("id", g.id);
+    store.put(g);
     return c.json({ id: g.id, role: "player" });
   }
-  const spectators = g.spectators ?? [];
-  if (!spectators.some((p: any) => p.id === player.id)) spectators.push(player);
-  await supabaseAdmin.from("games").update({ spectators, updated_at: new Date().toISOString() }).eq("id", g.id);
+  if (!g.spectators.some((p) => p.id === player.id)) g.spectators.push(player);
+  store.put(g);
   return c.json({ id: g.id, role: "spectator" });
 });
 
 games.post("/start", async (c) => {
   const { gameId, playerId } = await parseJson(
     c,
-    z.object({ gameId: z.string().uuid(), playerId: z.string().uuid() }),
+    z.object({ gameId: z.string().min(1), playerId: z.string().min(1) }),
   );
   const g = await loadGame(gameId);
   if (g.host_id !== playerId) return c.json({ error: "Only host can start" }, 403);
@@ -95,8 +106,8 @@ games.post("/play", async (c) => {
   const { gameId, playerId, cardId, chosenSuit } = await parseJson(
     c,
     z.object({
-      gameId: z.string().uuid(),
-      playerId: z.string().uuid(),
+      gameId: z.string().min(1),
+      playerId: z.string().min(1),
       cardId: z.string().min(1),
       chosenSuit: z.enum(["hearts", "diamonds", "clubs", "spades"]).optional(),
     }),
@@ -162,7 +173,7 @@ games.post("/play", async (c) => {
 games.post("/draw", async (c) => {
   const { gameId, playerId } = await parseJson(
     c,
-    z.object({ gameId: z.string().uuid(), playerId: z.string().uuid() }),
+    z.object({ gameId: z.string().min(1), playerId: z.string().min(1) }),
   );
   const g = await loadGame(gameId);
   if (g.status !== "playing") return c.json({ error: "Not in play" }, 400);
@@ -177,23 +188,23 @@ games.post("/draw", async (c) => {
 games.post("/leave", async (c) => {
   const { gameId, playerId } = await parseJson(
     c,
-    z.object({ gameId: z.string().uuid(), playerId: z.string().uuid() }),
+    z.object({ gameId: z.string().min(1), playerId: z.string().min(1) }),
   );
   const g = await loadGame(gameId);
-  const wasSpectator = (g.spectators ?? []).some((p) => p.id === playerId);
+  const wasSpectator = g.spectators.some((p) => p.id === playerId);
   if (wasSpectator && !g.players.some((p) => p.id === playerId)) {
-    const spectators = (g.spectators ?? []).filter((p) => p.id !== playerId);
-    await supabaseAdmin.from("games").update({ spectators: spectators as never, updated_at: new Date().toISOString() }).eq("id", g.id);
+    g.spectators = g.spectators.filter((p) => p.id !== playerId);
+    await persist(g);
     return c.json({ ok: true });
   }
   g.players = g.players.filter((p) => p.id !== playerId);
   delete g.hands[playerId];
-  if (g.players.length === 0 && (g.spectators?.length ?? 0) === 0) {
-    await supabaseAdmin.from("games").delete().eq("id", g.id);
+  if (g.players.length === 0 && g.spectators.length === 0) {
+    store.delete(g.id);
     return c.json({ ok: true });
   }
   if (g.players.length === 0) {
-    g.players = [...(g.spectators ?? [])];
+    g.players = [...g.spectators];
     g.spectators = [];
     g.host_id = g.players[0]?.id ?? g.host_id;
     g.status = "lobby";
@@ -215,12 +226,12 @@ games.post("/leave", async (c) => {
 games.post("/rematch", async (c) => {
   const { gameId } = await parseJson(
     c,
-    z.object({ gameId: z.string().uuid(), playerId: z.string().uuid() }),
+    z.object({ gameId: z.string().min(1), playerId: z.string().min(1) }),
   );
   const g = await loadGame(gameId);
   if (g.status !== "finished") return c.json({ error: "Game not finished" }, 400);
   const merged = [...g.players];
-  for (const s of g.spectators ?? []) {
+  for (const s of g.spectators) {
     if (!merged.some((p) => p.id === s.id) && merged.length < 6) merged.push(s);
   }
   g.players = merged;
