@@ -24,6 +24,7 @@ export default function GamePage() {
   const [cursors, setCursors] = useState<Record<string, { x: number; y: number; name: string; avatar: string }>>({});
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [animatingCard, setAnimatingCard] = useState<{ card: Card; from: { x: number; y: number } } | null>(null);
+  const [lastProcessedAction, setLastProcessedAction] = useState<string | null>(null);
 
   useEffect(() => {
     if (loading) return;
@@ -129,6 +130,33 @@ export default function GamePage() {
       return { top: `${top}%`, left: `${left}%`, angle };
     });
   }, [others.length]);
+
+  // Trigger animation for other players' moves
+  useEffect(() => {
+    if (!game || !game.last_action || game.last_action.type !== "play" || !game.last_action.by) return;
+    if (game.last_action.by === youId) return; // Local player animation is handled in onPlay
+
+    // Create a unique action key using text and by
+    const actionKey = `${game.last_action.by}-${game.last_action.text}-${game.updated_at}`;
+    if (lastProcessedAction === actionKey) return;
+    setLastProcessedAction(actionKey);
+
+    const playerIdx = others.findIndex(p => p.id === game.last_action?.by);
+    if (playerIdx !== -1) {
+      const pos = positions[playerIdx];
+      const topCard = game.discard[game.discard.length - 1];
+      if (topCard && pos) {
+        setAnimatingCard({ 
+          card: topCard, 
+          from: { 
+            x: parseFloat(pos.left), 
+            y: parseFloat(pos.top) 
+          } 
+        });
+        setTimeout(() => setAnimatingCard(null), 600);
+      }
+    }
+  }, [game?.last_action, game?.updated_at, others, positions, youId, lastProcessedAction]);
 
   const arrows = useMemo(() => {
     if (!game || game.status !== "playing") return [];
