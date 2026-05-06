@@ -1,4 +1,4 @@
-import { SUIT_COLOR, SUIT_SYMBOL, type Card, type Suit } from "@/lib/game";
+import { SUIT_HEX, SUIT_SYMBOL, type Card, type Suit } from "@/lib/game";
 
 interface Props {
   card?: Card;
@@ -11,9 +11,15 @@ interface Props {
 }
 
 const sizes = {
-  sm: "w-12 h-[68px] text-base",
-  md: "w-16 h-24 text-xl",
-  lg: "w-24 h-36 text-3xl",
+  sm: "w-10 h-[58px] text-sm",
+  md: "w-14 h-20 text-base",
+  lg: "w-20 h-28 text-2xl",
+};
+
+const cornerSizes = {
+  sm: "text-[9px]",
+  md: "text-[11px]",
+  lg: "text-[14px]",
 };
 
 function cn(...parts: (string | false | null | undefined)[]) {
@@ -24,24 +30,23 @@ export function PlayingCard({ card, faceDown, size = "md", onClick, disabled, hi
   if (faceDown || !card) {
     return (
       <div className={cn(
-        "rounded-xl border-4 border-amber-900/40 bg-gradient-to-br from-[oklch(0.55_0.20_28)] to-[oklch(0.35_0.15_28)] shadow-card relative overflow-hidden",
+        "rounded-xl border-4 border-amber-900/40 bg-gradient-to-br from-[oklch(0.55_0.20_28)] to-[oklch(0.35_0.15_28)] shadow-card relative overflow-hidden flex-shrink-0",
         sizes[size],
       )}>
         <div className="absolute inset-1 rounded-lg border-2 border-amber-200/20 flex items-center justify-center text-amber-100/80 font-display">
-          <div className="flex flex-col items-center gap-1">
-             <span className="text-[0.6em] tracking-tighter opacity-50">THE SALOON</span>
-             <span className="text-sm tracking-widest -rotate-12 border-y border-amber-200/40 py-1 px-2">BLAZIN'</span>
-             <span className="text-[1.2em] opacity-40">🎴</span>
+          <div className="flex flex-col items-center gap-0.5">
+            <span className="text-[0.55em] tracking-tighter opacity-50">SALOON</span>
+            <span className="text-[0.7em] tracking-widest -rotate-12 border-y border-amber-200/40 py-0.5 px-1">BLAZIN'</span>
+            <span className="text-[0.9em] opacity-40">🎴</span>
           </div>
         </div>
-        {/* Subtle texture overlay */}
-        <div className="absolute inset-0 opacity-10 pointer-events-none mix-blend-overlay bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]"></div>
       </div>
     );
   }
+
   const isWild = card.rank === "8" || card.rank === "K";
   const displaySuit = overrideSuit ?? (isWild ? undefined : card.suit);
-  const color = displaySuit ? SUIT_COLOR[displaySuit] : "black";
+  const colorHex = displaySuit ? SUIT_HEX[displaySuit] : SUIT_HEX.spades;
   const sym = displaySuit ? SUIT_SYMBOL[displaySuit] : "";
   const isSwitch = card.rank === "K";
 
@@ -49,47 +54,44 @@ export function PlayingCard({ card, faceDown, size = "md", onClick, disabled, hi
     <button
       type="button"
       onClick={onClick}
-      disabled={disabled}
+      disabled={disabled || !onClick}
       className={cn(
-        "rounded-xl border-2 bg-amber-50 shadow-card relative overflow-hidden transition-all select-none card-fancy",
+        "rounded-xl border-2 bg-white shadow-card relative overflow-hidden transition-all select-none card-fancy flex-shrink-0",
         sizes[size],
-        !disabled && onClick && "cursor-pointer",
-        disabled && onClick && "opacity-60 cursor-not-allowed grayscale-[0.5]",
-        highlight && "ring-4 ring-[var(--color-accent)] ring-offset-2 ring-offset-transparent -translate-y-6 z-50 relative",
-        isWild ? "border-[var(--color-accent)] bg-amber-100/50" : "border-amber-200",
+        onClick && !disabled && "cursor-pointer",
+        disabled && onClick && "opacity-55 cursor-not-allowed",
+        highlight && "ring-4 ring-[var(--color-accent)] ring-offset-1 ring-offset-transparent -translate-y-5 z-50 relative",
+        isWild ? "border-amber-400 bg-gradient-to-br from-amber-50 to-yellow-100" : "border-gray-200",
       )}
-      style={{ 
-        color: isWild ? "oklch(0.2 0.02 30)" : color === "red" ? "oklch(0.55 0.22 25)" : "oklch(0.2 0.02 30)",
-        background: isWild ? "linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)" : undefined
-      }}
+      style={{ color: colorHex }}
     >
-      {/* Decorative border */}
-      <div className="absolute inset-1 border border-amber-900/10 rounded-lg pointer-events-none"></div>
+      {/* Inner border */}
+      <div className="absolute inset-[3px] border border-gray-100 rounded-lg pointer-events-none" />
 
-      <div className="absolute top-1 left-1.5 leading-none flex flex-col items-center font-display z-10">
-        <span className="text-[0.7em] font-bold">{isSwitch ? "↺" : card.rank}</span>
-        <span className="text-[0.7em]">{sym}</span>
+      {/* Top-left corner */}
+      <div className={cn("absolute top-1 left-1 leading-none flex flex-col items-center font-display z-10 font-bold", cornerSizes[size])}>
+        <span>{isSwitch ? "K" : card.rank}</span>
+        {sym && <span>{sym}</span>}
       </div>
-      <div className="absolute bottom-1 right-1.5 leading-none flex flex-col items-center rotate-180 font-display z-10">
-        <span className="text-[0.7em] font-bold">{isSwitch ? "↺" : card.rank}</span>
-        <span className="text-[0.7em]">{sym}</span>
+
+      {/* Bottom-right corner (rotated) */}
+      <div className={cn("absolute bottom-1 right-1 leading-none flex flex-col items-center rotate-180 font-display z-10 font-bold", cornerSizes[size])}>
+        <span>{isSwitch ? "K" : card.rank}</span>
+        {sym && <span>{sym}</span>}
       </div>
-      
+
+      {/* Center symbol */}
       <div className="absolute inset-0 flex items-center justify-center">
-        <div className="relative">
-          {isSwitch ? <span className="text-[1.6em]" style={{ color: "oklch(0.78 0.16 70)" }}>⇄</span>
-            : card.rank === "8" ? <span className="text-[1.6em]" style={{ color: "oklch(0.78 0.16 70)" }}>★</span>
-            : <span className="text-[1.8em] opacity-90 drop-shadow-sm">{sym}</span>}
-          
-          {/* Subtle background suit symbol */}
-          {!isWild && (
-             <span className="absolute inset-0 flex items-center justify-center text-[3em] opacity-[0.03] -z-10 scale-150 rotate-12">{sym}</span>
-          )}
-        </div>
+        {isSwitch
+          ? <span style={{ color: "oklch(0.78 0.16 70)", fontSize: size === "lg" ? "2rem" : size === "md" ? "1.4rem" : "1rem" }}>⇄</span>
+          : card.rank === "8"
+            ? <span style={{ color: "oklch(0.78 0.16 70)", fontSize: size === "lg" ? "2rem" : size === "md" ? "1.4rem" : "1rem" }}>★</span>
+            : <span style={{ fontSize: size === "lg" ? "2.2rem" : size === "md" ? "1.6rem" : "1.1rem", opacity: 0.9 }}>{sym}</span>
+        }
       </div>
 
-      {/* Glossy effect */}
-      <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/20 to-white/0 pointer-events-none"></div>
+      {/* Glossy highlight */}
+      <div className="absolute inset-0 bg-gradient-to-br from-white/60 via-white/10 to-transparent pointer-events-none rounded-xl" />
     </button>
   );
 }

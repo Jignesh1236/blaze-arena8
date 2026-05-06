@@ -62,7 +62,7 @@ export interface GameRow {
   direction: number;
   draw_count: number;
   pending_draw_rank: string | null;
-  last_action: { type: string; by?: string; text?: string } | null;
+  last_action: { type: string; by?: string; text?: string; swap_target?: string; card_rank?: string } | null;
   winner_id: string | null;
   last_turn_at: string | null;
   updated_at: string;

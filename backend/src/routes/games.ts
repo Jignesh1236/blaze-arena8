@@ -152,6 +152,8 @@ games.post("/play", async (c) => {
   let skip = 0;
   let actionText = `Played ${card.rank}${suitSym(card.suit)}`;
 
+  let swapTarget: string | undefined;
+
   if (card.rank === "+1") {
     const nextId = nextTurn(g, 0);
     if (nextId) drawCards(g, nextId, 1);
@@ -163,6 +165,7 @@ games.post("/play", async (c) => {
       const theirs = g.hands[nextId] ?? [];
       g.hands[playerId] = theirs;
       g.hands[nextId] = mine;
+      swapTarget = nextId;
       actionText += " — Switcheroo! 🔄";
     }
   } else if (card.rank === "J") {
@@ -178,14 +181,14 @@ games.post("/play", async (c) => {
   if ((g.hands[playerId]?.length ?? 0) === 0) {
     g.status = "finished";
     g.winner_id = playerId;
-    g.last_action = { type: "win", by: playerId, text: actionText };
+    g.last_action = { type: "win", by: playerId, card_rank: card.rank, text: actionText };
     await persist(g);
     return c.json({ ok: true, won: true });
   }
 
   g.current_turn = nextTurn(g, skip);
   g.last_turn_at = new Date().toISOString();
-  g.last_action = { type: "play", by: playerId, text: actionText };
+  g.last_action = { type: "play", by: playerId, card_rank: card.rank, swap_target: swapTarget, text: actionText };
   await persist(g);
   return c.json({ ok: true });
 });

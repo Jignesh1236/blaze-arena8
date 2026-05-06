@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useGuest } from "@/lib/use-guest";
 import { api } from "@/lib/api";
 import { getSocket } from "@/lib/socket";
-import { canPlay, type Card, type GameRow, type Suit, SUIT_COLOR, SUIT_SYMBOL } from "@/lib/game";
+import { canPlay, type Card, type GameRow, type Suit, SUIT_HEX, SUIT_SYMBOL } from "@/lib/game";
 import { PlayingCard } from "@/components/PlayingCard";
 import { PlayerSeat } from "@/components/PlayerSeat";
 import { SuitPicker } from "@/components/SuitPicker";
@@ -11,6 +11,22 @@ import { Seo } from "@/components/Seo";
 
 function cn(...parts: (string | false | null | undefined)[]) {
   return parts.filter(Boolean).join(" ");
+}
+
+// Phase-based flying card — reliable across all browsers
+interface FlyingCard {
+  id: string;
+  card: Card | null;
+  fromX: number; fromY: number;
+  toX: number; toY: number;
+  isSwitch?: boolean;
+  phase: 0 | 1 | 2; // 0=at-from, 1=flying, 2=fading
+}
+
+interface SwitchOverlay {
+  fromAvatar: string; fromName: string;
+  toAvatar: string; toName: string;
+  key: string;
 }
 
 export default function GamePage() {
@@ -23,8 +39,47 @@ export default function GamePage() {
   const [error, setError] = useState("");
   const [cursors, setCursors] = useState<Record<string, { x: number; y: number; name: string; avatar: string }>>({});
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
-  const [animatingCard, setAnimatingCard] = useState<{ card: Card; from: { x: number; y: number } } | null>(null);
   const [lastProcessedAction, setLastProcessedAction] = useState<string | null>(null);
+  const [flyingCards, setFlyingCards] = useState<FlyingCard[]>([]);
+  const [reverseFlash, setReverseFlash] = useState<string | null>(null);
+  const [switchOverlay, setSwitchOverlay] = useState<SwitchOverlay | null>(null);
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  function addTimer(t: ReturnType<typeof setTimeout>) {
+    timersRef.current.push(t);
+  }
+
+  // Phase-based flying card animation — uses CSS transition (100% reliable)
+  const launchCard = useCallback((
+    card: Card | null,
+    fromX: number, fromY: number,
+    toX = 50, toY = 46,
+    isSwitch = false
+  ) => {
+    const id = `fc-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+    const duration = isSwitch ? 680 : 580;
+
+    setFlyingCards(prev => [...prev, { id, card, fromX, fromY, toX, toY, isSwitch, phase: 0 }]);
+
+    // Phase 1: start flying (after small delay for DOM paint)
+    addTimer(setTimeout(() => {
+      setFlyingCards(prev => prev.map(fc => fc.id === id ? { ...fc, phase: 1 } : fc));
+    }, 24));
+
+    // Phase 2: fade out
+    addTimer(setTimeout(() => {
+      setFlyingCards(prev => prev.map(fc => fc.id === id ? { ...fc, phase: 2 } : fc));
+    }, duration + 24));
+
+    // Remove
+    addTimer(setTimeout(() => {
+      setFlyingCards(prev => prev.filter(fc => fc.id !== id));
+    }, duration + 340));
+  }, []);
+
+  useEffect(() => {
+    return () => { timersRef.current.forEach(clearTimeout); };
+  }, []);
 
   useEffect(() => {
     if (loading) return;
@@ -34,57 +89,30 @@ export default function GamePage() {
   useEffect(() => {
     if (!id || !profile) return;
     const socket = getSocket();
-
-    // Load initial state via REST
     api.getGame(id).then(setGame).catch(() => navigate("/"));
 
-    // Join the socket room once connected (or immediately if already connected)
-    function joinRoom() {
-      socket.emit("join", id);
-    }
-
-    socket.on("game:update", (data: GameRow) => {
-      setGame(data);
-    });
-
+    function joinRoom() { socket.emit("join", id); }
+    socket.on("game:update", setGame);
     socket.on("player:moved", (data: { playerId: string; x: number; y: number }) => {
       const p = [...(game?.players || []), ...(game?.spectators || [])].find(x => x.id === data.playerId);
-      if (p) {
-        setCursors(prev => ({
-          ...prev,
-          [data.playerId]: { x: data.x, y: data.y, name: p.name, avatar: p.avatar }
-        }));
-      }
+      if (p) setCursors(prev => ({ ...prev, [data.playerId]: { x: data.x, y: data.y, name: p.name, avatar: p.avatar } }));
     });
-
     socket.on("connect", joinRoom);
-    socket.on("connect_error", (err) => {
-      console.error("WebSocket connection error:", err.message);
-    });
-
-    if (socket.connected) {
-      joinRoom();
-    } else {
-      socket.connect();
-    }
+    if (socket.connected) joinRoom(); else socket.connect();
 
     let lastMove = 0;
     const handleMouseMove = (e: MouseEvent) => {
       if (!socket.connected) return;
       const now = Date.now();
-      if (now - lastMove < 50) return; // Throttle to 20fps
+      if (now - lastMove < 60) return;
       lastMove = now;
-
-      const x = (e.clientX / window.innerWidth) * 100;
-      const y = (e.clientY / window.innerHeight) * 100;
-      socket.emit("player:move", { gameId: id, playerId: profile.id, x, y });
+      socket.emit("player:move", { gameId: id, playerId: profile.id, x: (e.clientX / window.innerWidth) * 100, y: (e.clientY / window.innerHeight) * 100 });
     };
-
     window.addEventListener("mousemove", handleMouseMove);
 
     return () => {
       socket.emit("leave", id);
-      socket.off("game:update");
+      socket.off("game:update", setGame);
       socket.off("player:moved");
       socket.off("connect", joinRoom);
       window.removeEventListener("mousemove", handleMouseMove);
@@ -93,18 +121,11 @@ export default function GamePage() {
   }, [id, navigate, profile, game?.players, game?.spectators]);
 
   useEffect(() => {
-    if (game?.status !== "playing" || !game.last_turn_at) {
-      setTimeLeft(null);
-      return;
-    }
-
+    if (game?.status !== "playing" || !game.last_turn_at) { setTimeLeft(null); return; }
     const interval = setInterval(() => {
-      const now = new Date().getTime();
-      const lastTurn = new Date(game.last_turn_at!).getTime();
-      const diff = Math.max(0, 60 - Math.floor((now - lastTurn) / 1000));
+      const diff = Math.max(0, 60 - Math.floor((Date.now() - new Date(game.last_turn_at!).getTime()) / 1000));
       setTimeLeft(diff);
     }, 1000);
-
     return () => clearInterval(interval);
   }, [game?.status, game?.last_turn_at]);
 
@@ -112,138 +133,131 @@ export default function GamePage() {
   const yourHand = useMemo(() => (youId && game ? game.hands[youId] ?? [] : []), [game, youId]);
   const others = useMemo(() => {
     if (!game) return [];
-    return youId ? game.players.filter((p) => p.id !== youId) : game.players;
+    return youId ? game.players.filter(p => p.id !== youId) : game.players;
   }, [game, youId]);
 
+  // Better positions — 2-player opponent never behind header, all clamped to visible area
   const positions = useMemo(() => {
     const count = others.length;
     if (count === 0) return [];
+    if (count === 1) return [{ top: "14%", left: "50%", angle: 90 }];
     return others.map((_, i) => {
-      let angle;
-      if (count === 1) angle = 90;
-      else angle = 180 - (i * (180 / (count - 1)));
+      const angle = 180 - (i * (180 / (count - 1)));
       const rad = (angle * Math.PI) / 180;
-      const rx = window.innerWidth < 640 ? 42 : 40;
-      const ry = window.innerWidth < 640 ? 28 : 32;
+      const isMobile = window.innerWidth < 640;
+      const rx = isMobile ? 37 : 36;
+      const ry = isMobile ? 22 : 26;
       const left = 50 + rx * Math.cos(rad);
-      const top = 40 - ry * Math.sin(rad);
+      const top = Math.max(13, 42 - ry * Math.sin(rad));
       return { top: `${top}%`, left: `${left}%`, angle };
     });
   }, [others.length]);
 
-  // Trigger animation for other players' moves
-  useEffect(() => {
-    if (!game || !game.last_action || game.last_action.type !== "play" || !game.last_action.by) return;
-    if (game.last_action.by === youId) return; // Local player animation is handled in onPlay
+  // Get viewport position (%) of a player
+  const getPlayerPos = useCallback((playerId: string): { x: number; y: number } | null => {
+    if (playerId === youId) return { x: 50, y: 86 };
+    const idx = others.findIndex(p => p.id === playerId);
+    if (idx !== -1 && positions[idx]) return { x: parseFloat(positions[idx].left), y: parseFloat(positions[idx].top) };
+    return null;
+  }, [youId, others, positions]);
 
-    // Create a unique action key using text and by
-    const actionKey = `${game.last_action.by}-${game.last_action.text}-${game.updated_at}`;
+  // Trigger animations for other players' moves
+  useEffect(() => {
+    if (!game?.last_action || game.last_action.type !== "play") return;
+    const action = game.last_action;
+    if (!action.by) return;
+
+    const actionKey = `${action.by}-${action.card_rank}-${game.updated_at}`;
     if (lastProcessedAction === actionKey) return;
     setLastProcessedAction(actionKey);
 
-    const playerIdx = others.findIndex(p => p.id === game.last_action?.by);
-    if (playerIdx !== -1) {
-      const pos = positions[playerIdx];
-      const topCard = game.discard[game.discard.length - 1];
-      if (topCard && pos) {
-        setAnimatingCard({ 
-          card: topCard, 
-          from: { 
-            x: parseFloat(pos.left), 
-            y: parseFloat(pos.top) 
-          } 
-        });
-        setTimeout(() => setAnimatingCard(null), 600);
+    const byPos = getPlayerPos(action.by);
+    const topCard = game.discard[game.discard.length - 1];
+
+    if (action.card_rank === "K" && action.swap_target) {
+      const targetPos = getPlayerPos(action.swap_target);
+      if (byPos && targetPos) {
+        launchCard(null, byPos.x, byPos.y, targetPos.x, targetPos.y, true);
+        addTimer(setTimeout(() => launchCard(null, targetPos.x, targetPos.y, byPos.x, byPos.y, true), 100));
+        const byPlayer = game.players.find(p => p.id === action.by);
+        const tPlayer = game.players.find(p => p.id === action.swap_target);
+        if (byPlayer && tPlayer) {
+          setSwitchOverlay({ fromAvatar: byPlayer.avatar, fromName: byPlayer.name, toAvatar: tPlayer.avatar, toName: tPlayer.name, key: actionKey });
+          addTimer(setTimeout(() => setSwitchOverlay(null), 1800));
+        }
       }
+      return;
     }
-  }, [game?.last_action, game?.updated_at, others, positions, youId, lastProcessedAction]);
+
+    if (action.card_rank === "Q") {
+      setReverseFlash(actionKey);
+      addTimer(setTimeout(() => setReverseFlash(null), 1500));
+    }
+
+    if (action.by !== youId && byPos && topCard) {
+      launchCard(topCard, byPos.x, byPos.y, 50, 46);
+    }
+  }, [game?.last_action, game?.updated_at, getPlayerPos, launchCard, youId]);
 
   const arrows = useMemo(() => {
     if (!game || game.status !== "playing") return [];
-    const allPlayersPos = [...positions, { left: "50%", top: "85%", angle: 270 }];
-    // Sort by angle to place arrows between them
-    allPlayersPos.sort((a, b) => a.angle - b.angle);
-    
-    const res = [];
-    for (let i = 0; i < allPlayersPos.length; i++) {
-      const p1 = allPlayersPos[i];
-      const p2 = allPlayersPos[(i + 1) % allPlayersPos.length];
-      
+    const allPos = [...positions, { left: "50%", top: "86%", angle: 270 }];
+    allPos.sort((a, b) => a.angle - b.angle);
+    return allPos.map((p1, i) => {
+      const p2 = allPos[(i + 1) % allPos.length];
       let midAngle = (p1.angle + p2.angle) / 2;
       if (Math.abs(p1.angle - p2.angle) > 180) midAngle += 180;
-      
       const rad = (midAngle * Math.PI) / 180;
-      const rx = window.innerWidth < 640 ? 32 : 30;
-      const ry = window.innerWidth < 640 ? 20 : 22;
-      const left = 50 + rx * Math.cos(rad);
-      const top = 45 - ry * Math.sin(rad);
-      
-      // Point arrow in game direction
-      const arrowRotation = midAngle + (game.direction === 1 ? 90 : -90);
-      
-      res.push({ left: `${left}%`, top: `${top}%`, rotate: `${arrowRotation}deg` });
-    }
-    return res;
+      const isMobile = window.innerWidth < 640;
+      const left = 50 + (isMobile ? 28 : 27) * Math.cos(rad);
+      const top = 46 - (isMobile ? 17 : 20) * Math.sin(rad);
+      return { left: `${left}%`, top: `${top}%`, rotate: `${midAngle + (game.direction === 1 ? 90 : -90)}deg` };
+    });
   }, [positions, game?.direction, game?.status]);
 
-  const top = game?.discard?.[game.discard.length - 1] ?? null;
+  const topCard = game?.discard?.[game.discard.length - 1] ?? null;
   const isYourTurn = game?.current_turn === youId && game?.status === "playing";
-  const isPlayer = !!(youId && game?.players.some((p) => p.id === youId));
-  const isSpectator = !!(youId && game?.spectators?.some((p) => p.id === youId));
+  const isPlayer = !!(youId && game?.players.some(p => p.id === youId));
+  const isSpectator = !!(youId && game?.spectators?.some(p => p.id === youId));
 
-  if (!game) return <div className="min-h-screen flex items-center justify-center">Loading the saloon…</div>;
+  if (!game) return (
+    <div className="min-h-screen flex items-center justify-center bg-table">
+      <div className="font-display text-amber-200 text-xl opacity-70">Loading the saloon…</div>
+    </div>
+  );
 
   if (game.status !== "lobby" && youId && profile && !isPlayer && !isSpectator) {
     void api.joinGame(game.code, profile).catch(() => {});
   }
 
-  const seoBlock = (
-    <Seo title={`Room ${game.code} — Blazing 8s`} description="A round of Blazing 8s in progress." path={`/game/${id}`} noIndex />
-  );
+  const seoBlock = <Seo title={`Room ${game.code} — Blazing 8s`} description="A round of Blazing 8s in progress." path={`/game/${id}`} noIndex />;
 
   if (game.status === "lobby") {
     return <>{seoBlock}<Lobby game={game} youId={youId} onLeave={async () => { if (youId) await api.leaveGame(game.id, youId); navigate("/"); }} /></>;
   }
 
   if (game.status === "finished") {
-    const winner = game.players.find((p) => p.id === game.winner_id);
+    const winner = game.players.find(p => p.id === game.winner_id);
     const youWon = game.winner_id === youId;
     return (
       <main className="min-h-screen bg-table flex items-center justify-center p-4 text-center overflow-hidden relative">
         {seoBlock}
-        {/* Confetti elements */}
         {youWon && Array.from({ length: 50 }).map((_, i) => (
-          <div key={i} className="confetti" style={{
-            left: `${Math.random() * 100}%`,
-            backgroundColor: i % 3 === 0 ? "var(--color-accent)" : i % 3 === 1 ? "var(--color-primary)" : "#fff",
-            animationDelay: `${Math.random() * 3}s`,
-            animationDuration: `${2 + Math.random() * 2}s`
-          }} />
+          <div key={i} className="confetti" style={{ left: `${Math.random() * 100}%`, backgroundColor: i % 3 === 0 ? "var(--color-accent)" : i % 3 === 1 ? "var(--color-primary)" : "#fff", animationDelay: `${Math.random() * 3}s`, animationDuration: `${2 + Math.random() * 2}s` }} />
         ))}
-        
         <div className="bg-card/95 backdrop-blur-xl border-2 border-amber-200/20 rounded-3xl p-8 sm:p-12 max-w-lg w-full shadow-2xl relative z-10 animate-deal">
-          <div className="text-8xl mb-6 animate-float">{youWon ? "🏆" : "🏜️"}</div>
-          <h1 className="font-display text-5xl sm:text-6xl mb-4 bg-gradient-to-b from-amber-200 to-amber-500 bg-clip-text text-transparent">
-            {youWon ? "VICTORY!" : "DEFEAT"}
-          </h1>
+          <div className="text-8xl mb-6">{youWon ? "🏆" : "🏜️"}</div>
+          <h1 className="font-display text-5xl sm:text-6xl mb-4 bg-gradient-to-b from-amber-200 to-amber-500 bg-clip-text text-transparent">{youWon ? "VICTORY!" : "DEFEAT"}</h1>
           <p className="text-xl opacity-90 mb-8 font-display">
-            {winner ? (
-              <span><span className="text-3xl mr-2">{winner.avatar}</span> {winner.name} swept the table!</span>
-            ) : "The dust has settled."}
+            {winner ? <span><span className="text-3xl mr-2">{winner.avatar}</span>{winner.name} swept the table!</span> : "The dust has settled."}
           </p>
-          
           <div className="space-y-3">
             {(isPlayer || isSpectator) && (
-              <button onClick={async () => { if (youId) await api.rematch(game.id, youId); }}
-                className="w-full bg-sunset font-display h-16 text-xl rounded-xl shadow-glow hover:scale-[1.02] active:scale-[0.98] transition-transform">
+              <button onClick={async () => { if (youId) await api.rematch(game.id, youId); }} className="w-full bg-sunset font-display h-14 text-lg rounded-xl shadow-glow hover:scale-[1.02] active:scale-[0.98] transition-transform">
                 RAISE THE STAKES (REMATCH)
               </button>
             )}
-            <Link to="/" className="block">
-              <button className="w-full border-2 border-amber-200/20 bg-white/5 font-display h-14 text-lg rounded-xl hover:bg-white/10 transition-colors">
-                RETURN TO SALOON
-              </button>
-            </Link>
+            <Link to="/"><button className="w-full border-2 border-amber-200/20 bg-white/5 font-display h-12 text-base rounded-xl hover:bg-white/10 transition-colors">RETURN TO SALOON</button></Link>
           </div>
         </div>
       </main>
@@ -251,26 +265,46 @@ export default function GamePage() {
   }
 
   async function onPlay(card: Card) {
-    if (!isYourTurn || !game || !youId || busy || !top || !game.current_suit) return;
-    if (!canPlay(card, top, game.current_suit)) { setError("Can't play that card"); return; }
+    if (!isYourTurn || !game || !youId || busy || !topCard || !game.current_suit) return;
+    if (!canPlay(card, topCard, game.current_suit)) { setError("Can't play that card"); return; }
     if (card.rank === "8") { setPendingCard(card); return; }
-    
-    // Trigger animation
-    setAnimatingCard({ card, from: { x: 50, y: 85 } }); // From bottom center
-    setTimeout(() => setAnimatingCard(null), 600);
+
+    if (card.rank === "K") {
+      const currentIdx = game.players.findIndex(p => p.id === youId);
+      const nextIdx = ((currentIdx + game.direction) % game.players.length + game.players.length) % game.players.length;
+      const nextPlayer = game.players[nextIdx];
+      if (nextPlayer && nextPlayer.id !== youId) {
+        const tPos = getPlayerPos(nextPlayer.id);
+        if (tPos) {
+          launchCard(null, 50, 86, tPos.x, tPos.y, true);
+          addTimer(setTimeout(() => launchCard(null, tPos.x, tPos.y, 50, 86, true), 100));
+          setSwitchOverlay({ fromAvatar: profile!.avatar, fromName: profile!.name, toAvatar: nextPlayer.avatar, toName: nextPlayer.name, key: `local-${Date.now()}` });
+          addTimer(setTimeout(() => setSwitchOverlay(null), 1800));
+        }
+      }
+    } else if (card.rank === "Q") {
+      setReverseFlash(`local-q-${Date.now()}`);
+      addTimer(setTimeout(() => setReverseFlash(null), 1500));
+      launchCard(card, 50, 86, 50, 46);
+    } else {
+      launchCard(card, 50, 86, 50, 46);
+    }
 
     setBusy(true); setError("");
     try { await api.playCard(game.id, youId, card.id); }
     catch (e) { const m = (e as Error).message; if (m !== "Not your turn") setError(m); }
     finally { setBusy(false); }
   }
+
   async function pickSuit(s: Suit) {
     if (!pendingCard || !game || !youId || busy) return;
+    launchCard(pendingCard, 50, 86, 50, 46);
     setBusy(true);
     try { await api.playCard(game.id, youId, pendingCard.id, s); setPendingCard(null); }
     catch (e) { setError((e as Error).message); setPendingCard(null); }
     finally { setBusy(false); }
   }
+
   async function onDraw() {
     if (!isYourTurn || !game || !youId || busy) return;
     setBusy(true);
@@ -279,124 +313,178 @@ export default function GamePage() {
     finally { setBusy(false); }
   }
 
+  const suitIndicatorColor = game.current_suit ? SUIT_HEX[game.current_suit] : undefined;
+
   return (
-    <main className="min-h-screen relative overflow-hidden flex flex-col bg-table">
+    <main className="min-h-screen relative overflow-hidden flex flex-col bg-table" style={{ height: "100dvh" }}>
       {seoBlock}
-      
-      {/* Other players' cursors */}
+
+      {/* ── Flying cards layer (CSS transition-based, reliable) ── */}
+      {flyingCards.map(fc => (
+        <div
+          key={fc.id}
+          style={{
+            position: "fixed",
+            zIndex: 200,
+            pointerEvents: "none",
+            left: fc.phase >= 1 ? `${fc.toX}%` : `${fc.fromX}%`,
+            top:  fc.phase >= 1 ? `${fc.toY}%` : `${fc.fromY}%`,
+            opacity: fc.phase >= 2 ? 0 : 1,
+            transform: `translate(-50%, -50%)${fc.phase >= 1 && fc.isSwitch ? " rotate(360deg)" : ""}`,
+            transition: fc.phase >= 1
+              ? `left ${fc.isSwitch ? 680 : 580}ms cubic-bezier(0.2,0.8,0.2,1), top ${fc.isSwitch ? 680 : 580}ms cubic-bezier(0.2,0.8,0.2,1), opacity 300ms ease-out, transform ${fc.isSwitch ? 680 : 580}ms ease-in-out`
+              : "none",
+          }}
+        >
+          {fc.card ? <PlayingCard card={fc.card} size="md" /> : <PlayingCard faceDown size="md" />}
+        </div>
+      ))}
+
+      {/* ── Reverse banner ── */}
+      {reverseFlash && (
+        <div key={reverseFlash} className="fixed z-[300] pointer-events-none" style={{ left: "50%", top: "50%", animation: "reverse-banner 1.5s ease forwards" }}>
+          <div className="bg-amber-400/95 backdrop-blur-md border-4 border-amber-200 rounded-2xl px-8 py-4 shadow-2xl text-center">
+            <div className="font-display text-2xl sm:text-3xl text-amber-950 tracking-widest">↺ REVERSE! ↻</div>
+            <div className="text-xs text-amber-900 font-display mt-1">Direction changed!</div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Switcheroo banner — no SVG/circles, just the clean popup ── */}
+      {switchOverlay && (
+        <div key={switchOverlay.key} className="fixed z-[300] pointer-events-none" style={{ left: "50%", top: "50%", animation: "switch-banner 1.8s ease forwards" }}>
+          <div className="bg-purple-900/95 backdrop-blur-md border-4 border-purple-400 rounded-2xl px-5 py-4 shadow-2xl text-center min-w-[200px]">
+            <div className="font-display text-xl sm:text-2xl text-purple-200 tracking-wider mb-2">🔄 SWITCHEROO!</div>
+            <div className="flex items-center justify-center gap-3">
+              <div className="flex flex-col items-center">
+                <span className="text-3xl">{switchOverlay.fromAvatar}</span>
+                <span className="text-[10px] font-display text-purple-300 max-w-[56px] truncate mt-0.5">{switchOverlay.fromName}</span>
+              </div>
+              <span className="text-purple-300 text-2xl font-bold">⇄</span>
+              <div className="flex flex-col items-center">
+                <span className="text-3xl">{switchOverlay.toAvatar}</span>
+                <span className="text-[10px] font-display text-purple-300 max-w-[56px] truncate mt-0.5">{switchOverlay.toName}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Cursor followers ── */}
       {Object.entries(cursors).map(([pid, pos]) => (
         pid !== youId && (
           <div key={pid} className="cursor-follower" style={{ left: `${pos.x}%`, top: `${pos.y}%` }}>
-            <div className="relative">
-              <span className="text-xl drop-shadow-md">{pos.avatar}</span>
-              <span className="absolute left-full top-0 ml-1 px-1.5 py-0.5 bg-black/60 text-[10px] rounded whitespace-nowrap border border-white/10 backdrop-blur-sm">
-                {pos.name}
-              </span>
-            </div>
+            <span className="text-xl drop-shadow-md">{pos.avatar}</span>
           </div>
         )
       ))}
 
-      <div className="relative z-20 flex items-center justify-between px-2 sm:px-4 py-2 sm:py-3 bg-black/40 backdrop-blur-md border-b border-amber-200/10 gap-2">
-        <div className="flex items-center gap-2">
-          <button onClick={async () => { if (youId) await api.leaveGame(game.id, youId); navigate("/"); }}
-            className="font-display h-9 px-3 text-[10px] sm:text-xs rounded-lg bg-destructive shadow-lg hover:opacity-90 transition-opacity uppercase tracking-tighter">← Leave</button>
-          
+      {/* ── Top bar ── */}
+      <div className="relative z-20 flex items-center justify-between px-2 sm:px-4 py-2 bg-black/50 backdrop-blur-md border-b border-amber-200/10 gap-2 flex-shrink-0">
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={async () => { if (youId) await api.leaveGame(game.id, youId); navigate("/"); }}
+            className="font-display h-8 px-2.5 text-[10px] sm:text-xs rounded-lg bg-destructive shadow-lg hover:opacity-90 transition-opacity uppercase tracking-tighter"
+          >← Leave</button>
           {isPlayer && game.status === "playing" && (
-            <button onClick={async () => { if (youId) await api.becomeSpectator(game.id, youId); }}
-              className="font-display h-9 px-3 text-[10px] sm:text-xs rounded-lg bg-white/10 border border-white/10 shadow-lg hover:bg-white/20 transition-all uppercase tracking-tighter">👀 Spectate</button>
+            <button
+              onClick={async () => { if (youId) await api.becomeSpectator(game.id, youId); }}
+              className="font-display h-8 px-2 text-[10px] rounded-lg bg-white/10 border border-white/10 hover:bg-white/20 transition-all uppercase tracking-tighter hidden sm:block"
+            >👀 Spectate</button>
           )}
         </div>
-        
-        <div className="flex items-center gap-4 sm:gap-8">
-          <div className="text-center leading-tight">
-            <div className="text-[10px] opacity-50 font-display">ROOM</div>
-            <div className="font-display tracking-[0.2em] text-sm sm:text-base text-amber-200">{game.code}</div>
-          </div>
 
+        <div className="flex items-center gap-3 sm:gap-6">
+          <div className="text-center leading-tight">
+            <div className="text-[9px] opacity-50 font-display">ROOM</div>
+            <div className="font-display tracking-[0.2em] text-sm text-amber-200">{game.code}</div>
+          </div>
           {timeLeft !== null && (
-            <div className={cn(
-              "flex flex-col items-center justify-center min-w-[50px] p-1 rounded-lg border backdrop-blur-sm",
-              timeLeft <= 10 ? "bg-destructive/20 border-destructive animate-pulse" : "bg-white/5 border-white/10"
-            )}>
-              <div className="text-[9px] font-display opacity-60">TIMER</div>
-              <div className="font-display text-sm leading-none">{timeLeft}s</div>
+            <div className={cn("flex flex-col items-center justify-center min-w-[42px] px-1.5 py-0.5 rounded-lg border", timeLeft <= 10 ? "bg-destructive/20 border-destructive animate-pulse" : "bg-white/5 border-white/10")}>
+              <div className="text-[8px] font-display opacity-60">TIME</div>
+              <div className="font-display text-xs leading-none">{timeLeft}s</div>
             </div>
           )}
         </div>
 
-        <div className="text-[11px] opacity-80 max-w-[40%] truncate text-right font-display italic text-amber-100/70">
+        <div className="text-[10px] opacity-70 max-w-[36%] truncate text-right font-display italic text-amber-100/70">
           {game.last_action?.text}
         </div>
       </div>
 
       {isSpectator && (
-        <div className="bg-accent/20 backdrop-blur-sm border-b border-accent/40 text-center py-2 text-sm font-display relative z-20 shadow-lg">
-          👀 Watching the showdown — you'll join the next round, partner!
+        <div className="bg-accent/20 backdrop-blur-sm border-b border-accent/40 text-center py-1.5 text-xs font-display relative z-20 flex-shrink-0">
+          👀 Watching — you'll join next round!
         </div>
       )}
 
-      <div className="relative z-10 flex-1 flex flex-col">
-        {/* The Round Table Layout */}
-        <div className="relative flex-1 min-h-[400px]">
-          {/* Table Indicator Ring */}
-          <div className="absolute top-[45%] left-1/2 -translate-x-1/2 -translate-y-1/2 w-[85vw] h-[85vw] max-w-[600px] max-h-[600px] border-2 border-amber-200/5 rounded-full pointer-events-none shadow-[inset_0_0_50px_rgba(251,191,36,0.05)]">
-             {/* Direction Arrows between players */}
-             {arrows.map((arrow, i) => (
-               <div key={i} className="absolute text-amber-200/30 text-3xl font-bold transition-all duration-700"
-                 style={{ 
-                   left: arrow.left, 
-                   top: arrow.top, 
-                   transform: `translate(-50%, -50%) rotate(${arrow.rotate})` 
-                 }}>
-                 ➔
-               </div>
-             ))}
+      {/* ── Game area ── */}
+      <div className="relative z-10 flex-1 flex flex-col overflow-hidden min-h-0">
+
+        {/* Table with players and center pile */}
+        <div className="relative flex-1 min-h-0">
+
+          {/* Table ring */}
+          <div
+            className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full pointer-events-none border border-amber-200/8"
+            style={{
+              top: "46%",
+              width: "min(82vw, 65vh)",
+              height: "min(82vw, 65vh)",
+              boxShadow: "inset 0 0 40px rgba(251,191,36,0.04)",
+            }}
+          >
+            {/* Direction arrows */}
+            {arrows.map((arrow, i) => (
+              <div
+                key={i}
+                className={cn("absolute text-2xl font-bold transition-all duration-600", reverseFlash ? "text-amber-400/90" : "text-amber-200/25")}
+                style={{
+                  left: arrow.left, top: arrow.top,
+                  transform: `translate(-50%, -50%) rotate(${arrow.rotate})`,
+                  filter: reverseFlash ? "drop-shadow(0 0 6px rgba(251,191,36,0.8))" : undefined,
+                  transition: "color 0.4s, filter 0.4s",
+                }}
+              >➔</div>
+            ))}
           </div>
 
+          {/* Other players */}
           {others.map((p, i) => (
             <div key={p.id} className="absolute -translate-x-1/2 -translate-y-1/2 transition-all duration-700" style={positions[i]}>
-              <PlayerSeat player={p} cardCount={game.hands[p.id]?.length ?? 0}
-                isCurrent={game.current_turn === p.id} isHost={game.host_id === p.id} />
+              <PlayerSeat player={p} cardCount={game.hands[p.id]?.length ?? 0} isCurrent={game.current_turn === p.id} isHost={game.host_id === p.id} />
             </div>
           ))}
 
-          {/* Center Area: Deck and Discard */}
-          <div className="absolute top-[45%] left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-4 sm:gap-12">
-            {/* Animating Card */}
-            {animatingCard && (
-              <div className="fixed z-[100] pointer-events-none transition-all duration-500 ease-in-out"
-                style={{
-                  left: `${animatingCard.from.x}%`,
-                  top: `${animatingCard.from.y}%`,
-                  transform: 'translate(-50%, -50%) scale(0.8)',
-                  animation: 'play-card-anim 0.5s forwards'
-                }}>
-                <PlayingCard card={animatingCard.card} size="md" />
-              </div>
-            )}
-
-             {/* Deck shadow effect */}
-            <div className="absolute -left-1 top-1 w-24 h-36 bg-black/20 rounded-xl blur-sm -z-10"></div>
-            
-            <button onClick={onDraw} disabled={!isYourTurn} className="relative disabled:opacity-60 hover:scale-105 active:scale-95 transition-transform group">
+          {/* Center: Deck + Discard */}
+          <div className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-3 sm:gap-8" style={{ top: "46%" }}>
+            {/* Draw pile */}
+            <button
+              onClick={onDraw}
+              disabled={!isYourTurn}
+              className="relative disabled:opacity-50 hover:scale-105 active:scale-95 transition-transform group"
+            >
               <PlayingCard faceDown size="lg" />
-              <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-black/60 px-2 py-0.5 rounded text-[10px] opacity-0 group-hover:opacity-100 transition-opacity uppercase tracking-tighter">DRAW</div>
+              <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 bg-black/70 px-2 py-0.5 rounded text-[9px] opacity-0 group-hover:opacity-100 transition-opacity uppercase tracking-wider font-display whitespace-nowrap">
+                Draw card
+              </div>
             </button>
 
-            <div className="relative group">
-              {/* Discard pile depth effect */}
+            {/* Discard pile */}
+            <div className="relative">
               {game.discard.length > 1 && (
-                <div className="absolute inset-0 translate-x-1 translate-y-1 rotate-3 -z-10">
-                   <PlayingCard card={game.discard[game.discard.length - 2]} size="lg" disabled />
+                <div className="absolute inset-0 translate-x-1 translate-y-1 rotate-6 -z-10 opacity-60">
+                  <PlayingCard card={game.discard[game.discard.length - 2]} size="lg" />
                 </div>
               )}
-              
-              {top && <PlayingCard card={top} size="lg" overrideSuit={game.current_suit ?? undefined} />}
-              
-              {game.current_suit && top && (top.rank === "8" || top.rank === "K") && (
-                <div className="absolute -bottom-4 -right-4 bg-amber-50 border-2 border-amber-200 rounded-full w-12 h-12 flex items-center justify-center text-3xl shadow-2xl"
-                  style={{ color: SUIT_COLOR[game.current_suit] === "red" ? "oklch(0.55 0.22 25)" : "oklch(0.2 0.02 30)" }}>
+              {topCard && <PlayingCard card={topCard} size="lg" overrideSuit={game.current_suit ?? undefined} />}
+
+              {/* Wild suit indicator */}
+              {game.current_suit && topCard && (topCard.rank === "8" || topCard.rank === "K") && (
+                <div
+                  className="absolute -bottom-3 -right-3 bg-white border-2 rounded-full w-9 h-9 sm:w-11 sm:h-11 flex items-center justify-center text-xl sm:text-2xl shadow-xl"
+                  style={{ borderColor: suitIndicatorColor, color: suitIndicatorColor }}
+                >
                   {SUIT_SYMBOL[game.current_suit]}
                 </div>
               )}
@@ -404,68 +492,95 @@ export default function GamePage() {
           </div>
         </div>
 
-        <div className="text-center mb-4 relative z-20">
+        {/* ── Turn indicator ── */}
+        <div className="text-center py-1.5 relative z-20 flex-shrink-0">
           {isYourTurn ? (
-            <div className="inline-block bg-accent text-accent-foreground px-6 py-2 rounded-full font-display text-base shadow-glow">
+            <div className="inline-block bg-accent text-accent-foreground px-5 py-1.5 rounded-full font-display text-sm shadow-glow animate-pulse-glow">
               Your move, partner! 🤠
             </div>
           ) : (
-            <div className="bg-black/20 backdrop-blur-sm inline-block px-4 py-1.5 rounded-full border border-white/5 text-sm">
-              <span className="opacity-60">Waitin' for </span>
-              <span className="font-display text-amber-200">{game.players.find((p) => p.id === game.current_turn)?.name}</span>
-              <span className="opacity-60">…</span>
+            <div className="bg-black/30 backdrop-blur-sm inline-block px-3 py-1 rounded-full border border-white/5 text-xs sm:text-sm">
+              <span className="opacity-50">Waitin' for </span>
+              <span className="font-display text-amber-200">{game.players.find(p => p.id === game.current_turn)?.name}</span>
+              <span className="opacity-50">…</span>
             </div>
           )}
-          {error && <div className="text-sm mt-2 font-display bg-destructive/10 py-1 px-4 inline-block rounded-lg" style={{ color: "oklch(0.7 0.2 25)" }}>{error}</div>}
+          {error && (
+            <div className="mt-1 text-xs font-display bg-destructive/10 py-0.5 px-3 inline-block rounded-lg" style={{ color: "oklch(0.7 0.2 25)" }}>
+              {error}
+            </div>
+          )}
         </div>
 
+        {/* ── Player hand / spectator view ── */}
         {isPlayer ? (
-          <div className="pb-8 px-1 bg-gradient-to-t from-black/40 to-transparent pt-6">
-            <div className="flex justify-center -space-x-4 sm:-space-x-6 overflow-x-auto py-12 px-8 no-scrollbar min-h-[220px] items-end relative">
-                {/* Your Avatar at the bottom center of the table area */}
-                <div className="absolute -top-10 left-1/2 -translate-x-1/2 -translate-y-full opacity-40 scale-75 pointer-events-none">
-                   <PlayerSeat player={profile!} cardCount={yourHand.length} isCurrent={isYourTurn} />
-                </div>
+          <div className="flex-shrink-0 bg-gradient-to-t from-black/50 via-black/20 to-transparent pt-2 pb-3 px-2">
+            {/* Player info strip */}
+            <div className="flex items-center justify-center gap-2 mb-1.5">
+              <span className="text-base leading-none">{profile?.avatar}</span>
+              <span className="text-[10px] font-display text-amber-200/70 truncate max-w-[80px]">{profile?.name}</span>
+              <span className="text-[10px] bg-amber-900/40 px-1.5 py-0.5 rounded-full font-display text-amber-200/60">{yourHand.length} cards</span>
+              {isYourTurn && <span className="text-[10px] bg-accent/20 border border-accent/40 px-1.5 py-0.5 rounded-full font-display text-accent animate-pulse">YOUR TURN</span>}
+            </div>
 
+            {/* Hand cards — no ghost avatar, clean horizontal scroll */}
+            <div
+              className="flex items-end justify-center overflow-x-auto no-scrollbar"
+              style={{ minHeight: "96px", paddingBottom: "4px", paddingLeft: "8px", paddingRight: "8px" }}
+            >
               {yourHand.map((card, i) => {
-                const playable = !!top && !!game.current_suit && isYourTurn && canPlay(card, top, game.current_suit);
+                const playable = !!topCard && !!game.current_suit && isYourTurn && canPlay(card, topCard, game.current_suit);
                 return (
-                  <div key={card.id} className="animate-deal shrink-0 transition-all duration-200 hover:z-[60] hover:-translate-y-8" style={{ animationDelay: `${i * 50}ms`, zIndex: i }}>
-                    <PlayingCard card={card} size="md" onClick={() => onPlay(card)} disabled={!playable} highlight={playable} />
+                  <div
+                    key={card.id}
+                    className="animate-hand-deal flex-shrink-0 hover:-translate-y-4 transition-transform duration-150"
+                    style={{
+                      animationDelay: `${i * 35}ms`,
+                      zIndex: i,
+                      marginLeft: i === 0 ? 0 : "-10px",
+                    }}
+                  >
+                    <PlayingCard
+                      card={card}
+                      size="md"
+                      onClick={() => onPlay(card)}
+                      disabled={!playable}
+                      highlight={playable}
+                    />
                   </div>
                 );
               })}
             </div>
           </div>
         ) : isSpectator ? (
-          <div className="pb-8 px-1 bg-gradient-to-t from-black/20 to-transparent pt-6 border-t border-white/5">
-             <div className="text-center mb-4 text-xs font-display opacity-50 tracking-widest uppercase">Table View (All Hands)</div>
-             <div className="flex flex-wrap justify-center gap-6 px-4">
-               {game.players.map((p) => (
-                 <div key={p.id} className="flex flex-col items-center gap-2 bg-black/20 p-3 rounded-xl border border-white/5">
-                   <div className="flex -space-x-4">
-                     {Array.from({ length: Math.min(game.hands[p.id]?.length || 0, 5) }).map((_, i) => (
-                       <div key={i} style={{ zIndex: i }}>
-                         <PlayingCard faceDown size="sm" />
-                       </div>
-                     ))}
-                     {(game.hands[p.id]?.length || 0) > 5 && (
-                       <div className="w-10 h-[58px] bg-card border border-border rounded-lg flex items-center justify-center text-[10px] font-display z-10 translate-x-2">
-                         +{game.hands[p.id].length - 5}
-                       </div>
-                     )}
-                   </div>
-                   <div className="text-[10px] font-display opacity-70 flex items-center gap-1">
-                     <span>{p.avatar}</span>
-                     <span className="truncate max-w-[60px]">{p.name}</span>
-                   </div>
-                 </div>
-               ))}
-             </div>
+          <div className="flex-shrink-0 pb-3 px-2 bg-gradient-to-t from-black/20 to-transparent border-t border-white/5">
+            <div className="text-center mb-2 text-[10px] font-display opacity-40 tracking-widest uppercase pt-2">All Hands</div>
+            <div className="flex flex-wrap justify-center gap-3 px-2">
+              {game.players.map(p => (
+                <div key={p.id} className="flex flex-col items-center gap-1 bg-black/20 p-2 rounded-xl border border-white/5">
+                  <div className="flex" style={{ gap: "-4px" }}>
+                    {Array.from({ length: Math.min(game.hands[p.id]?.length || 0, 5) }).map((_, i) => (
+                      <div key={i} style={{ zIndex: i, marginLeft: i === 0 ? 0 : "-6px" }}>
+                        <PlayingCard faceDown size="sm" />
+                      </div>
+                    ))}
+                    {(game.hands[p.id]?.length || 0) > 5 && (
+                      <div className="w-8 h-[46px] bg-card border border-border rounded-lg flex items-center justify-center text-[9px] font-display" style={{ marginLeft: "-6px" }}>
+                        +{game.hands[p.id].length - 5}
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-[9px] font-display opacity-60 flex items-center gap-0.5">
+                    <span>{p.avatar}</span>
+                    <span className="truncate max-w-[48px]">{p.name}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         ) : (
-          <div className="pb-10 text-center bg-black/40 backdrop-blur-sm pt-6 border-t border-white/5">
-            <p className="opacity-60 text-sm font-display tracking-wide italic">Watching the showdown — wait for this round to end to join the table.</p>
+          <div className="flex-shrink-0 pb-6 text-center bg-black/30 backdrop-blur-sm pt-4 border-t border-white/5">
+            <p className="opacity-50 text-xs font-display tracking-wide italic">Wait for this round to end to join the table.</p>
           </div>
         )}
       </div>
@@ -494,45 +609,41 @@ function Lobby({ game, youId, onLeave }: { game: GameRow; youId?: string; onLeav
 
   return (
     <main className="min-h-screen bg-table">
-      <div className="max-w-2xl mx-auto p-4 sm:p-8">
-        <div className="flex items-center justify-between mb-6">
-          <Link to="/" className="text-sm opacity-80" onClick={onLeave}>← Leave</Link>
-          <span className="font-display text-xl">🔥 Blazing 8s</span>
+      <div className="max-w-lg mx-auto p-4 sm:p-6">
+        <div className="flex items-center justify-between mb-4">
+          <Link to="/" className="text-sm opacity-70 font-display" onClick={onLeave}>← Leave</Link>
+          <span className="font-display text-lg">🔥 Blazing 8s</span>
         </div>
-        <div className="bg-card/90 backdrop-blur border border-border rounded-2xl p-6 sm:p-8 shadow-card text-center">
-          <p className="opacity-80 text-sm">Share this code with your posse</p>
+        <div className="bg-card/90 backdrop-blur border border-border rounded-2xl p-5 sm:p-8 shadow-card text-center">
+          <p className="opacity-70 text-xs font-display tracking-widest uppercase">Share code with your posse</p>
           <button onClick={copy} className="mt-2 inline-flex items-center gap-3">
             <span className="font-display text-5xl sm:text-7xl tracking-[0.2em]" style={{ color: "oklch(0.78 0.16 70)" }}>{game.code}</span>
-            <span className="text-xs bg-black/40 px-2 py-1 rounded">{copied ? "Copied!" : "Copy"}</span>
+            <span className="text-[10px] bg-black/40 px-2 py-1 rounded font-display">{copied ? "Copied!" : "Copy"}</span>
           </button>
-          <div className="mt-8">
-            <h3 className="font-display text-xl mb-3">Players ({game.players.length}/6)</h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {game.players.map((p) => (
-                <div key={p.id} className="bg-black/30 border border-border rounded-xl p-3 flex items-center gap-2">
-                  <span className="text-2xl">{p.avatar}</span>
-                  <span className="font-display truncate">{p.name}</span>
-                  {p.id === game.host_id && <span className="ml-auto text-sm">👑</span>}
+          <div className="mt-6">
+            <h3 className="font-display text-base mb-3 opacity-70">Players ({game.players.length}/6)</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {game.players.map(p => (
+                <div key={p.id} className="flex items-center gap-2 bg-black/20 rounded-xl p-2.5 border border-white/5">
+                  <span className="text-xl">{p.avatar}</span>
+                  <div className="text-left min-w-0">
+                    <div className="font-display text-xs truncate">{p.name}</div>
+                    {p.id === game.host_id && <div className="text-[9px] opacity-50">👑 Host</div>}
+                  </div>
                 </div>
-              ))}
-              {Array.from({ length: 6 - game.players.length }).map((_, i) => (
-                <div key={i} className="border border-dashed border-border rounded-xl p-3 opacity-50 text-sm flex items-center justify-center">empty seat</div>
               ))}
             </div>
           </div>
-          <div className="mt-8">
-            {isHost ? (
-              <button onClick={start} disabled={busy || game.players.length < 2}
-                className="w-full bg-sunset font-display h-14 text-lg rounded-lg shadow-glow disabled:opacity-60">
-                {game.players.length < 2 ? "Need 2+ players" : "Deal the cards 🎴"}
-              </button>
-            ) : <p className="opacity-70 italic">Waiting for the host to start…</p>}
-            {error && <p className="text-sm mt-2" style={{ color: "oklch(0.7 0.2 25)" }}>{error}</p>}
-          </div>
+          {error && <p className="mt-3 text-xs font-display" style={{ color: "oklch(0.7 0.2 25)" }}>{error}</p>}
+          {isHost ? (
+            <button onClick={start} disabled={busy || game.players.length < 2}
+              className="mt-5 w-full bg-sunset font-display h-13 text-base rounded-xl shadow-glow hover:scale-[1.02] active:scale-[0.98] transition-transform disabled:opacity-50 py-3">
+              {busy ? "Dealing…" : game.players.length < 2 ? "Need 2+ players" : "START GAME →"}
+            </button>
+          ) : (
+            <p className="mt-5 opacity-50 font-display text-sm">Waitin' for the host…</p>
+          )}
         </div>
-        <p className="mt-6 text-center text-sm opacity-80">
-          <strong>How to play:</strong> Match suit or rank. <strong>★ Wild 8</strong>, <strong>⇄ Switcheroo</strong> playable anytime. <strong>+1</strong> = next draws 1. <strong>J</strong> skips. <strong>Q</strong> reverses (3+).
-        </p>
       </div>
     </main>
   );

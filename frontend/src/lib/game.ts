@@ -62,7 +62,7 @@ export interface GameRow {
   direction: number;
   draw_count: number;
   pending_draw_rank: string | null;
-  last_action: { type: string; by?: string; text?: string } | null;
+  last_action: { type: string; by?: string; text?: string; swap_target?: string; card_rank?: string } | null;
   winner_id: string | null;
   last_turn_at: string | null;
   updated_at: string;
@@ -71,8 +71,18 @@ export interface GameRow {
 export const SUIT_SYMBOL: Record<Suit, string> = {
   hearts: "♥", diamonds: "♦", clubs: "♣", spades: "♠", wild: "★",
 };
-export const SUIT_COLOR: Record<Suit, "red" | "black"> = {
-  hearts: "red", diamonds: "red", clubs: "black", spades: "black", wild: "black",
+
+// 4-color system: hearts=red, diamonds=blue, clubs=green, spades=black
+export const SUIT_COLOR: Record<Suit, "red" | "blue" | "green" | "black"> = {
+  hearts: "red", diamonds: "blue", clubs: "green", spades: "black", wild: "black",
+};
+
+export const SUIT_HEX: Record<Suit, string> = {
+  hearts:   "oklch(0.55 0.22 25)",
+  diamonds: "oklch(0.45 0.22 260)",
+  clubs:    "oklch(0.38 0.16 145)",
+  spades:   "oklch(0.15 0.02 30)",
+  wild:     "oklch(0.15 0.02 30)",
 };
 
 export function suitSym(s: Suit) {
