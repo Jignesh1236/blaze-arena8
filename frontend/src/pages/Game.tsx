@@ -109,6 +109,27 @@ export default function GamePage() {
 
   const youId = profile?.id;
   const yourHand = useMemo(() => (youId && game ? game.hands[youId] ?? [] : []), [game, youId]);
+  const others = useMemo(() => {
+    if (!game) return [];
+    return youId ? game.players.filter((p) => p.id !== youId) : game.players;
+  }, [game, youId]);
+
+  const positions = useMemo(() => {
+    const count = others.length;
+    if (count === 0) return [];
+    return others.map((_, i) => {
+      let angle;
+      if (count === 1) angle = 90;
+      else angle = 180 - (i * (180 / (count - 1)));
+      const rad = (angle * Math.PI) / 180;
+      const rx = window.innerWidth < 640 ? 40 : 38;
+      const ry = window.innerWidth < 640 ? 25 : 30;
+      const left = 50 + rx * Math.cos(rad);
+      const top = 35 - ry * Math.sin(rad);
+      return { top: `${top}%`, left: `${left}%` };
+    });
+  }, [others.length]);
+
   const top = game?.discard?.[game.discard.length - 1] ?? null;
   const isYourTurn = game?.current_turn === youId && game?.status === "playing";
   const isPlayer = !!(youId && game?.players.some((p) => p.id === youId));
@@ -201,24 +222,6 @@ export default function GamePage() {
     catch (e) { const m = (e as Error).message; if (m !== "Not your turn") setError(m); }
     finally { setBusy(false); }
   }
-
-  const others = youId ? game.players.filter((p) => p.id !== youId) : game.players;
-
-  const positions = useMemo(() => {
-    const count = others.length;
-    if (count === 0) return [];
-    return others.map((_, i) => {
-      let angle;
-      if (count === 1) angle = 90;
-      else angle = 180 - (i * (180 / (count - 1)));
-      const rad = (angle * Math.PI) / 180;
-      const rx = window.innerWidth < 640 ? 40 : 38;
-      const ry = window.innerWidth < 640 ? 25 : 30;
-      const left = 50 + rx * Math.cos(rad);
-      const top = 35 - ry * Math.sin(rad);
-      return { top: `${top}%`, left: `${left}%` };
-    });
-  }, [others.length]);
 
   return (
     <main className="min-h-screen relative overflow-hidden flex flex-col bg-table">
