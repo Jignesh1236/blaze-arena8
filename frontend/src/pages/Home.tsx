@@ -44,6 +44,33 @@ export default function HomePage() {
     };
   }, []);
 
+  // Load banner ad
+  useEffect(() => {
+    const container = document.getElementById('banner-ad-container');
+    if (!container) return;
+
+    // Set atOptions
+    (window as any).atOptions = {
+      'key': '0ceec5a7bf06f1913d15695622a746b7',
+      'format': 'iframe',
+      'height': 60,
+      'width': 468,
+      'params': {}
+    };
+
+    // Load ad script
+    const script = document.createElement('script');
+    script.src = 'https://www.highperformanceformat.com/0ceec5a7bf06f1913d15695622a746b7/invoke.js';
+    script.async = true;
+    container.appendChild(script);
+
+    return () => {
+      // Cleanup
+      const existingScript = container.querySelector('script[src*="highperformanceformat"]');
+      if (existingScript) existingScript.remove();
+    };
+  }, []);
+
   function ensureProfile() {
     if (profile) return profile;
     const t = name.trim();
@@ -223,18 +250,7 @@ export default function HomePage() {
 
           {/* Banner Ad */}
           <div className="mt-10 flex justify-center">
-            <div id="banner-ad-container" className="bg-card/80 backdrop-blur border border-border rounded-xl p-2 shadow-card" style={{ minWidth: '468px', minHeight: '60px' }}>
-              <script dangerouslySetInnerHTML={{__html: `
-                atOptions = {
-                  'key': '0ceec5a7bf06f1913d15695622a746b7',
-                  'format': 'iframe',
-                  'height': 60,
-                  'width': 468,
-                  'params': {}
-                };
-              `}} />
-              <script src="https://www.highperformanceformat.com/0ceec5a7bf06f1913d15695622a746b7/invoke.js"></script>
-            </div>
+            <div id="banner-ad-container" className="bg-card/80 backdrop-blur border border-border rounded-xl p-2 shadow-card" style={{ minWidth: '468px', minHeight: '60px', overflow: 'hidden' }} />
           </div>
 
           <div className="mt-12 grid sm:grid-cols-3 gap-4 text-left">
