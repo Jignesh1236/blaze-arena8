@@ -1,0 +1,235 @@
+import { Hono } from "hono";
+import { z } from "zod";
+import { supabaseAdmin } from "../lib/supabase.js";
+import { buildDeck, canPlay, genRoomCode, type Card } from "../lib/game.js";
+import { HAND_SIZE, drawCards, loadGame, nextTurn, persist, suitSym } from "../lib/engine.js";
+
+export const games = new Hono();
+
+const playerSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1).max(24),
+  avatar: z.string().min(1).max(8),
+});
+
+async function parseJson<T extends z.ZodTypeAny>(c: any, schema: T): Promise<z.infer<T>> {
+  const raw = await c.req.json().catch(() => ({}));
+  return schema.parse(raw);
+}
+
+games.post("/create", async (c) => {
+  const { player } = await parseJson(c, z.object({ player: playerSchema }));
+  let code = genRoomCode();
+  for (let i = 0; i < 5; i++) {
+    const { data: existing } = await supabaseAdmin.from("games").select("id").eq("code", code).maybeSingle();
+    if (!existing) break;
+    code = genRoomCode();
+  }
+  const { data: row, error } = await supabaseAdmin
+    .from("games")
+    .insert({ code, host_id: player.id, status: "lobby", players: [player] as never })
+    .select("*")
+    .single();
+  if (error) return c.json({ error: error.message }, 400);
+  return c.json({ id: (row as any).id, code });
+});
+
+games.post("/join", async (c) => {
+  const { code, player } = await parseJson(
+    c,
+    z.object({ code: z.string().min(3).max(8), player: playerSchema }),
+  );
+  const upper = code.toUpperCase().trim();
+  const { data: game, error } = await supabaseAdmin.from("games").select("*").eq("code", upper).maybeSingle();
+  if (error || !game) return c.json({ error: "Room not found" }, 404);
+  const g = game as any;
+  if (g.players.some((p: any) => p.id === player.id)) return c.json({ id: g.id, role: "player" });
+  if (g.status === "lobby") {
+    if (g.players.length >= 6) return c.json({ error: "Room is full" }, 400);
+    g.players.push(player);
+    await supabaseAdmin.from("games").update({ players: g.players, updated_at: new Date().toISOString() }).eq("id", g.id);
+    return c.json({ id: g.id, role: "player" });
+  }
+  const spectators = g.spectators ?? [];
+  if (!spectators.some((p: any) => p.id === player.id)) spectators.push(player);
+  await supabaseAdmin.from("games").update({ spectators, updated_at: new Date().toISOString() }).eq("id", g.id);
+  return c.json({ id: g.id, role: "spectator" });
+});
+
+games.post("/start", async (c) => {
+  const { gameId, playerId } = await parseJson(
+    c,
+    z.object({ gameId: z.string().uuid(), playerId: z.string().uuid() }),
+  );
+  const g = await loadGame(gameId);
+  if (g.host_id !== playerId) return c.json({ error: "Only host can start" }, 403);
+  if (g.status !== "lobby") return c.json({ error: "Already started" }, 400);
+  if (g.players.length < 2) return c.json({ error: "Need at least 2 players" }, 400);
+  const deck = buildDeck();
+  const filteredDeck = g.players.length === 2 ? deck.filter((c2) => c2.rank !== "Q") : deck;
+  const hands: Record<string, Card[]> = {};
+  for (const p of g.players) hands[p.id] = [];
+  for (let i = 0; i < HAND_SIZE; i++) {
+    for (const p of g.players) hands[p.id].push(filteredDeck.shift()!);
+  }
+  let first = filteredDeck.shift()!;
+  while (["8", "+1", "J", "Q", "K"].includes(first.rank)) {
+    filteredDeck.push(first);
+    first = filteredDeck.shift()!;
+  }
+  g.deck = filteredDeck;
+  g.hands = hands;
+  g.discard = [first];
+  g.current_suit = first.suit;
+  g.current_turn = g.players[0].id;
+  g.direction = 1;
+  g.draw_count = 0;
+  g.pending_draw_rank = null;
+  g.status = "playing";
+  g.last_action = { type: "start", text: "Game started" };
+  await persist(g);
+  return c.json({ ok: true });
+});
+
+games.post("/play", async (c) => {
+  const { gameId, playerId, cardId, chosenSuit } = await parseJson(
+    c,
+    z.object({
+      gameId: z.string().uuid(),
+      playerId: z.string().uuid(),
+      cardId: z.string().min(1),
+      chosenSuit: z.enum(["hearts", "diamonds", "clubs", "spades"]).optional(),
+    }),
+  );
+  const g = await loadGame(gameId);
+  if (g.status !== "playing") return c.json({ error: "Not in play" }, 400);
+  if (g.current_turn !== playerId) return c.json({ error: "Not your turn" }, 400);
+  const hand = g.hands[playerId] ?? [];
+  const cardIdx = hand.findIndex((cd) => cd.id === cardId);
+  if (cardIdx === -1) return c.json({ error: "Card not in hand" }, 400);
+  const card = hand[cardIdx];
+  const top = g.discard[g.discard.length - 1];
+  if (!g.current_suit) return c.json({ error: "Bad state" }, 400);
+  if (!canPlay(card, top, g.current_suit)) return c.json({ error: "Illegal move" }, 400);
+  if ((card.rank === "8" || card.rank === "K") && !chosenSuit) return c.json({ error: "Choose a suit" }, 400);
+
+  hand.splice(cardIdx, 1);
+  g.hands[playerId] = hand;
+  g.discard.push(card);
+  g.current_suit = card.rank === "8" || card.rank === "K" ? chosenSuit! : card.suit;
+
+  let skip = 0;
+  let actionText = `Played ${card.rank}${suitSym(card.suit)}`;
+
+  if (card.rank === "+1") {
+    const nextId = nextTurn(g, 0);
+    if (nextId) drawCards(g, nextId, 1);
+    actionText += " — +1 to next!";
+  } else if (card.rank === "K") {
+    const nextId = nextTurn(g, 0);
+    if (nextId && nextId !== playerId) {
+      const mine = g.hands[playerId] ?? [];
+      const theirs = g.hands[nextId] ?? [];
+      g.hands[playerId] = theirs;
+      g.hands[nextId] = mine;
+      actionText += " — Switcheroo! 🔄";
+    }
+    actionText += ` — chose ${chosenSuit}`;
+  } else if (card.rank === "J") {
+    skip = 1;
+    actionText += " — skip!";
+  } else if (card.rank === "Q") {
+    g.direction *= -1;
+    actionText += " — reverse!";
+  } else if (card.rank === "8") {
+    actionText = `Played ★ wild — chose ${chosenSuit}`;
+  }
+
+  if ((g.hands[playerId]?.length ?? 0) === 0) {
+    g.status = "finished";
+    g.winner_id = playerId;
+    g.last_action = { type: "win", by: playerId, text: actionText };
+    await persist(g);
+    return c.json({ ok: true, won: true });
+  }
+
+  g.current_turn = nextTurn(g, skip);
+  g.last_action = { type: "play", by: playerId, text: actionText };
+  await persist(g);
+  return c.json({ ok: true });
+});
+
+games.post("/draw", async (c) => {
+  const { gameId, playerId } = await parseJson(
+    c,
+    z.object({ gameId: z.string().uuid(), playerId: z.string().uuid() }),
+  );
+  const g = await loadGame(gameId);
+  if (g.status !== "playing") return c.json({ error: "Not in play" }, 400);
+  if (g.current_turn !== playerId) return c.json({ error: "Not your turn" }, 400);
+  drawCards(g, playerId, 1);
+  g.last_action = { type: "draw", by: playerId, text: "Drew 1" };
+  g.current_turn = nextTurn(g);
+  await persist(g);
+  return c.json({ ok: true });
+});
+
+games.post("/leave", async (c) => {
+  const { gameId, playerId } = await parseJson(
+    c,
+    z.object({ gameId: z.string().uuid(), playerId: z.string().uuid() }),
+  );
+  const g = await loadGame(gameId);
+  const wasSpectator = (g.spectators ?? []).some((p) => p.id === playerId);
+  if (wasSpectator && !g.players.some((p) => p.id === playerId)) {
+    const spectators = (g.spectators ?? []).filter((p) => p.id !== playerId);
+    await supabaseAdmin.from("games").update({ spectators: spectators as never, updated_at: new Date().toISOString() }).eq("id", g.id);
+    return c.json({ ok: true });
+  }
+  g.players = g.players.filter((p) => p.id !== playerId);
+  delete g.hands[playerId];
+  if (g.players.length === 0 && (g.spectators?.length ?? 0) === 0) {
+    await supabaseAdmin.from("games").delete().eq("id", g.id);
+    return c.json({ ok: true });
+  }
+  if (g.players.length === 0) {
+    g.players = [...(g.spectators ?? [])];
+    g.spectators = [];
+    g.host_id = g.players[0]?.id ?? g.host_id;
+    g.status = "lobby";
+    g.hands = {}; g.deck = []; g.discard = [];
+    g.current_suit = null; g.current_turn = null;
+    g.draw_count = 0; g.pending_draw_rank = null; g.winner_id = null;
+  }
+  if (g.current_turn === playerId) g.current_turn = g.players[0].id;
+  if (g.host_id === playerId) g.host_id = g.players[0].id;
+  if (g.status === "playing" && g.players.length === 1) {
+    g.status = "finished";
+    g.winner_id = g.players[0].id;
+  }
+  g.last_action = { type: "leave", by: playerId, text: "Player left" };
+  await persist(g);
+  return c.json({ ok: true });
+});
+
+games.post("/rematch", async (c) => {
+  const { gameId } = await parseJson(
+    c,
+    z.object({ gameId: z.string().uuid(), playerId: z.string().uuid() }),
+  );
+  const g = await loadGame(gameId);
+  if (g.status !== "finished") return c.json({ error: "Game not finished" }, 400);
+  const merged = [...g.players];
+  for (const s of g.spectators ?? []) {
+    if (!merged.some((p) => p.id === s.id) && merged.length < 6) merged.push(s);
+  }
+  g.players = merged;
+  g.spectators = [];
+  g.status = "lobby";
+  g.hands = {}; g.deck = []; g.discard = [];
+  g.current_suit = null; g.current_turn = null;
+  g.direction = 1; g.draw_count = 0; g.pending_draw_rank = null; g.winner_id = null;
+  g.last_action = { type: "rematch", text: "New round!" };
+  await persist(g);
+  return c.json({ ok: true });
+});

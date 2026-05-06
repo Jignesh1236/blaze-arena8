@@ -1,0 +1,1 @@
+DROP POLICY IF EXISTS games_insert_any ON public.games;

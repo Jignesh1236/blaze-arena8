@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /game/
+Disallow: /auth
+
+Sitemap: /sitemap.xml

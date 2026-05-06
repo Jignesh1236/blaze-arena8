@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: oklch(0.28 0.05 30);
+  --color-foreground: oklch(0.97 0.04 80);
+  --color-card: oklch(0.34 0.07 35);
+  --color-muted: oklch(0.85 0.04 70);
+  --color-border: oklch(0.45 0.07 35 / 0.6);
+  --color-accent: oklch(0.78 0.16 70);
+  --color-accent-foreground: oklch(0.20 0.05 30);
+  --color-primary: oklch(0.62 0.20 28);
+  --color-destructive: oklch(0.55 0.22 25);
+}
+
+:root {
+  --gradient-sunset: linear-gradient(135deg, oklch(0.62 0.20 28), oklch(0.78 0.16 70));
+  --gradient-table: radial-gradient(ellipse at center, oklch(0.45 0.10 35) 0%, oklch(0.28 0.06 30) 70%);
+  --shadow-card: 0 10px 30px -8px oklch(0 0 0 / 50%);
+  --shadow-glow: 0 0 40px oklch(0.78 0.16 70 / 40%);
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: 'Rye', 'Georgia', serif;
+  margin: 0;
+  min-height: 100vh;
+}
+
+h1, h2, h3, .font-display {
+  font-family: 'Rye', 'Georgia', serif;
+  letter-spacing: 0.02em;
+}
+
+@utility bg-sunset { background-image: var(--gradient-sunset); }
+@utility bg-table { background-image: var(--gradient-table); }
+@utility shadow-card { box-shadow: var(--shadow-card); }
+@utility shadow-glow { box-shadow: var(--shadow-glow); }
+
+@keyframes card-deal {
+  0% { transform: translateY(-200%) rotate(-180deg) scale(0.6); opacity: 0; }
+  100% { transform: translate(0,0) rotate(0) scale(1); opacity: 1; }
+}
+.animate-deal { animation: card-deal 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+
+@keyframes pulse-glow {
+  0%,100% { box-shadow: 0 0 0 0 oklch(0.78 0.16 70 / 60%); }
+  50% { box-shadow: 0 0 0 12px oklch(0.78 0.16 70 / 0%); }
+}
+.animate-pulse-glow { animation: pulse-glow 1.6s ease-in-out infinite; }
+
+@keyframes float {
+  0%,100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.animate-float { animation: float 3s ease-in-out infinite; }

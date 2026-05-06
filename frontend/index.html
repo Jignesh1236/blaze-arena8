@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#3a1a0e" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rye&family=Special+Elite&display=swap" />
+
+    <!-- Default SEO (overridden per route via react-helmet-async) -->
+    <title>Blazing 8s — Real-time Multiplayer Crazy Eights</title>
+    <meta name="description" content="Wild West twist on Crazy Eights. Real-time multiplayer card showdown. No login — pick a handle, share a code, deal the cards." />
+    <link rel="canonical" href="https://blazing8s.com/" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Blazing 8s — Wild West Card Showdown" />
+    <meta property="og:description" content="Real-time multiplayer Crazy Eights with a Wild West twist." />
+    <meta property="og:url" content="https://blazing8s.com/" />
+    <meta property="og:image" content="https://blazing8s.com/og-image.jpg" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Blazing 8s — Wild West Card Showdown" />
+    <meta name="twitter:description" content="Real-time multiplayer Crazy Eights with a Wild West twist." />
+    <meta name="twitter:image" content="https://blazing8s.com/og-image.jpg" />
+
+    <!-- JSON-LD: VideoGame schema -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "VideoGame",
+        "name": "Blazing 8s",
+        "description": "Real-time multiplayer Crazy Eights card game with a Wild West theme. Up to 6 players per room.",
+        "url": "https://blazing8s.com/",
+        "genre": ["Card Game", "Multiplayer", "Casual"],
+        "playMode": "MultiPlayer",
+        "numberOfPlayers": { "@type": "QuantitativeValue", "minValue": 2, "maxValue": 6 },
+        "applicationCategory": "Game",
+        "operatingSystem": "Web Browser",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

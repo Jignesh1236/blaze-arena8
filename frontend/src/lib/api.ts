@@ -1,0 +1,35 @@
+// Thin client wrapping the VPS backend. All game state mutations go through this.
+import type { Player, Suit } from "./game";
+
+const API = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
+if (!API) console.warn("VITE_API_URL is not set — backend calls will fail.");
+
+async function post<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error ?? `Request failed (${res.status})`);
+  }
+  return res.json();
+}
+
+export const api = {
+  createGame: (player: Player) =>
+    post<{ id: string; code: string }>("/api/games/create", { player }),
+  joinGame: (code: string, player: Player) =>
+    post<{ id: string; role: "player" | "spectator" }>("/api/games/join", { code, player }),
+  startGame: (gameId: string, playerId: string) =>
+    post<{ ok: true }>("/api/games/start", { gameId, playerId }),
+  playCard: (gameId: string, playerId: string, cardId: string, chosenSuit?: Suit) =>
+    post<{ ok: true; won?: boolean }>("/api/games/play", { gameId, playerId, cardId, chosenSuit }),
+  drawCard: (gameId: string, playerId: string) =>
+    post<{ ok: true }>("/api/games/draw", { gameId, playerId }),
+  leaveGame: (gameId: string, playerId: string) =>
+    post<{ ok: true }>("/api/games/leave", { gameId, playerId }),
+  rematch: (gameId: string, playerId: string) =>
+    post<{ ok: true }>("/api/games/rematch", { gameId, playerId }),
+};
