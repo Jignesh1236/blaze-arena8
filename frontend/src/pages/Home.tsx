@@ -191,6 +191,13 @@ export default function HomePage() {
             </div>
           )}
 
+          {/* Banner Ad */}
+          <div className="mt-10 flex justify-center">
+            <div id="banner-ad-container" className="bg-card/80 backdrop-blur border border-border rounded-xl p-2 shadow-card" style={{ minWidth: '468px', minHeight: '60px' }}>
+              {/* Banner ad loads here */}
+            </div>
+          </div>
+
           <div className="mt-12 grid sm:grid-cols-3 gap-4 text-left">
             <Feature icon="⚡" title="Real-time" desc="Live updates the moment cards hit the table." />
             <Feature icon="🎴" title="Classic rules" desc="Match suits & ranks. 8s are wild. Switcheroo swaps hands." />
