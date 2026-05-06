@@ -50,7 +50,7 @@ games.post("/create", async (c) => {
   let code = genRoomCode();
   for (let i = 0; i < 5 && store.findByCode(code); i++) code = genRoomCode();
   const g = newGame(code, player.id, player);
-  store.put(g);
+  await persist(g);
   return c.json({ id: g.id, code });
 });
 
@@ -65,11 +65,11 @@ games.post("/join", async (c) => {
   if (g.status === "lobby") {
     if (g.players.length >= 6) return c.json({ error: "Room is full" }, 400);
     g.players.push(player);
-    store.put(g);
+    await persist(g);
     return c.json({ id: g.id, role: "player" });
   }
   if (!g.spectators.some((p) => p.id === player.id)) g.spectators.push(player);
-  store.put(g);
+  await persist(g);
   return c.json({ id: g.id, role: "spectator" });
 });
 
