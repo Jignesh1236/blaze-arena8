@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useGuest } from "@/lib/use-guest";
-import { api } from "@/lib/api";
+import { api, type PublicGame } from "@/lib/api";
+import { getSocket } from "@/lib/socket";
 import { Seo } from "@/components/Seo";
 import { PlayingCard } from "@/components/PlayingCard";
 
@@ -15,6 +16,31 @@ export default function HomePage() {
   const [avatar, setAvatar] = useState("🤠");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [games, setGames] = useState<PublicGame[]>([]);
+
+  useEffect(() => {
+    const socket = getSocket();
+
+    function onLobbyUpdate(data: PublicGame[]) {
+      setGames(data);
+    }
+
+    socket.on("lobby:update", onLobbyUpdate);
+    socket.on("connect", () => socket.emit("join:lobby"));
+
+    if (socket.connected) {
+      socket.emit("join:lobby");
+    } else {
+      socket.connect();
+    }
+
+    return () => {
+      socket.emit("leave:lobby");
+      socket.off("lobby:update", onLobbyUpdate);
+      socket.off("connect");
+      socket.disconnect();
+    };
+  }, []);
 
   function ensureProfile() {
     if (profile) return profile;
@@ -30,6 +56,7 @@ export default function HomePage() {
     catch (e) { setError((e as Error).message); }
     finally { setBusy(false); }
   }
+
   async function handleJoin() {
     const p = ensureProfile(); if (!p) return;
     if (!code.trim()) { setError("Enter a room code"); return; }
@@ -38,6 +65,16 @@ export default function HomePage() {
     catch (e) { setError((e as Error).message); }
     finally { setBusy(false); }
   }
+
+  async function handleJoinGame(g: PublicGame) {
+    const p = ensureProfile(); if (!p) return;
+    setBusy(true); setError("");
+    try { const r = await api.joinGame(g.code, p); navigate(`/game/${r.id}`); }
+    catch (e) { setError((e as Error).message); }
+    finally { setBusy(false); }
+  }
+
+  const activeGames = games.filter((g) => g.status === "lobby" || g.status === "playing");
 
   return (
     <main className="min-h-screen relative overflow-hidden bg-table">
@@ -105,6 +142,50 @@ export default function HomePage() {
             </div>
             {error && <p className="mt-3 text-sm" style={{ color: "oklch(0.7 0.2 25)" }}>{error}</p>}
           </div>
+
+          {/* Active Rooms */}
+          {activeGames.length > 0 && (
+            <div className="mt-10 max-w-2xl mx-auto text-left">
+              <h2 className="font-display text-2xl mb-4 text-center" style={{ color: "oklch(0.85 0.04 70)" }}>
+                🏜️ Active Rooms
+                <span className="ml-2 inline-block bg-[var(--color-accent)]/20 border border-[var(--color-accent)]/40 text-[var(--color-accent)] font-sans text-sm px-2 py-0.5 rounded-full align-middle">
+                  LIVE
+                </span>
+              </h2>
+              <div className="grid sm:grid-cols-2 gap-3">
+                {activeGames.map((g) => (
+                  <div key={g.id} className="bg-card/90 backdrop-blur border border-border rounded-xl p-4 shadow-card flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-display tracking-widest text-lg" style={{ color: "oklch(0.78 0.16 70)" }}>{g.code}</span>
+                        <span className={`text-xs px-2 py-0.5 rounded-full border font-display ${
+                          g.status === "lobby"
+                            ? "border-green-500/40 text-green-400 bg-green-500/10"
+                            : "border-amber-500/40 text-amber-400 bg-amber-500/10"
+                        }`}>
+                          {g.status === "lobby" ? "Waiting" : "Playing"}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 text-sm overflow-hidden">
+                        {g.players.slice(0, 5).map((p) => (
+                          <span key={p.id} title={p.name}>{p.avatar}</span>
+                        ))}
+                        {g.players.length > 5 && <span className="text-xs opacity-60">+{g.players.length - 5}</span>}
+                        <span className="text-xs opacity-60 ml-1">{g.players.length}/6</span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleJoinGame(g)}
+                      disabled={busy}
+                      className="shrink-0 px-4 py-2 rounded-lg font-display text-sm bg-sunset disabled:opacity-60 hover:opacity-90"
+                    >
+                      {g.status === "lobby" ? "Join" : "Watch"}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="mt-12 grid sm:grid-cols-3 gap-4 text-left">
             <Feature icon="⚡" title="Real-time" desc="Live updates the moment cards hit the table." />

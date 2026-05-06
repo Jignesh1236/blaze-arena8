@@ -1,5 +1,4 @@
-// Thin client wrapping the VPS backend. All game state mutations go through this.
-import type { Player, Suit } from "./game";
+import type { Player, Suit, GameRow } from "./game";
 
 const API = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
 if (!API) console.warn("VITE_API_URL is not set — backend calls will fail.");
@@ -17,7 +16,25 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return res.json();
 }
 
+async function get<T>(path: string): Promise<T> {
+  const res = await fetch(`${API}${path}`);
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error ?? `Request failed (${res.status})`);
+  }
+  return res.json();
+}
+
+export type PublicGame = {
+  id: string; code: string; status: string;
+  players: { id: string; name: string; avatar: string }[];
+  host_id: string; updated_at: string;
+};
+
 export const api = {
+  getAllGames: () => get<PublicGame[]>("/api/games"),
+  getGame: (gameId: string) =>
+    get<GameRow>(`/api/games/${gameId}`),
   createGame: (player: Player) =>
     post<{ id: string; code: string }>("/api/games/create", { player }),
   joinGame: (code: string, player: Player) =>

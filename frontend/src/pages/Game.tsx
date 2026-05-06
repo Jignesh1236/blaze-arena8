@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useGuest } from "@/lib/use-guest";
-import { supabase } from "@/lib/supabase";
 import { api } from "@/lib/api";
+import { getSocket } from "@/lib/socket";
 import { canPlay, type Card, type GameRow, type Suit, SUIT_COLOR, SUIT_SYMBOL } from "@/lib/game";
 import { PlayingCard } from "@/components/PlayingCard";
 import { PlayerSeat } from "@/components/PlayerSeat";
@@ -25,18 +25,34 @@ export default function GamePage() {
 
   useEffect(() => {
     if (!id) return;
-    let active = true;
-    supabase.from("games").select("*").eq("id", id).maybeSingle().then(({ data }) => {
-      if (active && data) setGame(data as unknown as GameRow);
+    const socket = getSocket();
+
+    // Load initial state via REST
+    api.getGame(id).then(setGame).catch(() => navigate("/"));
+
+    // Join the socket room once connected (or immediately if already connected)
+    function joinRoom() {
+      socket.emit("join", id);
+    }
+
+    socket.on("game:update", (data: GameRow) => {
+      setGame(data);
     });
-    const channel = supabase
-      .channel(`game:${id}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "games", filter: `id=eq.${id}` }, (payload) => {
-        if (payload.eventType === "DELETE") { navigate("/"); return; }
-        if (payload.new) setGame(payload.new as unknown as GameRow);
-      })
-      .subscribe();
-    return () => { active = false; supabase.removeChannel(channel); };
+
+    socket.on("connect", joinRoom);
+
+    if (socket.connected) {
+      joinRoom();
+    } else {
+      socket.connect();
+    }
+
+    return () => {
+      socket.emit("leave", id);
+      socket.off("game:update");
+      socket.off("connect", joinRoom);
+      socket.disconnect();
+    };
   }, [id, navigate]);
 
   const youId = profile?.id;
@@ -56,12 +72,10 @@ export default function GamePage() {
     <Seo title={`Room ${game.code} — Blazing 8s`} description="A round of Blazing 8s in progress." path={`/game/${id}`} noIndex />
   );
 
-  // Lobby
   if (game.status === "lobby") {
     return <>{seoBlock}<Lobby game={game} youId={youId} onLeave={async () => { if (youId) await api.leaveGame(game.id, youId); navigate("/"); }} /></>;
   }
 
-  // Finished
   if (game.status === "finished") {
     const winner = game.players.find((p) => p.id === game.winner_id);
     const youWon = game.winner_id === youId;
@@ -85,7 +99,7 @@ export default function GamePage() {
   async function onPlay(card: Card) {
     if (!isYourTurn || !game || !youId || busy || !top || !game.current_suit) return;
     if (!canPlay(card, top, game.current_suit)) { setError("Can't play that card"); return; }
-    if (card.rank === "8" || card.rank === "K") { setPendingCard(card); return; }
+    if (card.rank === "8") { setPendingCard(card); return; }
     setBusy(true); setError("");
     try { await api.playCard(game.id, youId, card.id); }
     catch (e) { const m = (e as Error).message; if (m !== "Not your turn") setError(m); }
