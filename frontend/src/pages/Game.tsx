@@ -230,8 +230,15 @@ export default function GamePage() {
       ))}
 
       <div className="relative z-20 flex items-center justify-between px-2 sm:px-4 py-2 sm:py-3 bg-black/40 backdrop-blur-md border-b border-amber-200/10 gap-2">
-        <button onClick={async () => { if (youId) await api.leaveGame(game.id, youId); navigate("/"); }}
-          className="font-display h-9 px-4 text-xs sm:text-sm rounded-lg bg-destructive shadow-lg hover:opacity-90 transition-opacity">← Leave</button>
+        <div className="flex items-center gap-2">
+          <button onClick={async () => { if (youId) await api.leaveGame(game.id, youId); navigate("/"); }}
+            className="font-display h-9 px-3 text-[10px] sm:text-xs rounded-lg bg-destructive shadow-lg hover:opacity-90 transition-opacity uppercase tracking-tighter">← Leave</button>
+          
+          {isPlayer && game.status === "playing" && (
+            <button onClick={async () => { if (youId) await api.becomeSpectator(game.id, youId); }}
+              className="font-display h-9 px-3 text-[10px] sm:text-xs rounded-lg bg-white/10 border border-white/10 shadow-lg hover:bg-white/20 transition-all uppercase tracking-tighter">👀 Spectate</button>
+          )}
+        </div>
         
         <div className="flex items-center gap-4 sm:gap-8">
           <div className="text-center leading-tight">

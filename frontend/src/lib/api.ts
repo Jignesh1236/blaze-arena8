@@ -49,4 +49,6 @@ export const api = {
     post<{ ok: true }>("/api/games/leave", { gameId, playerId }),
   rematch: (gameId: string, playerId: string) =>
     post<{ ok: true }>("/api/games/rematch", { gameId, playerId }),
+  becomeSpectator: (gameId: string, playerId: string) =>
+    post<{ ok: true }>("/api/games/spectate", { gameId, playerId }),
 };
