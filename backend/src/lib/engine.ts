@@ -42,4 +42,17 @@ export async function persist(g: GameRow) {
   emitGameUpdate(g);
 }
 
+export async function forceSkipTurn(gameId: string) {
+  const g = store.get(gameId);
+  if (!g || g.status !== "playing" || !g.current_turn) return;
+
+  const player = g.players.find((p) => p.id === g.current_turn);
+  const actionText = `${player?.name || "Player"} was too slow! Turn skipped.`;
+
+  g.current_turn = nextTurn(g);
+  g.last_turn_at = new Date().toISOString();
+  g.last_action = { type: "skip", text: actionText };
+  await persist(g);
+}
+
 export { buildDeck, canPlay, suitSym, type Card, type GameRow, type Suit };

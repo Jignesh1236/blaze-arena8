@@ -53,6 +53,7 @@ function newGame(code: string, hostId: string, host: z.infer<typeof playerSchema
     pending_draw_rank: null,
     last_action: null,
     winner_id: null,
+    last_turn_at: null,
     updated_at: new Date().toISOString(),
   };
 }
@@ -115,6 +116,7 @@ games.post("/start", async (c) => {
   g.draw_count = 0;
   g.pending_draw_rank = null;
   g.status = "playing";
+  g.last_turn_at = new Date().toISOString();
   g.last_action = { type: "start", text: "Game started" };
   await persist(g);
   return c.json({ ok: true });
@@ -182,6 +184,7 @@ games.post("/play", async (c) => {
   }
 
   g.current_turn = nextTurn(g, skip);
+  g.last_turn_at = new Date().toISOString();
   g.last_action = { type: "play", by: playerId, text: actionText };
   await persist(g);
   return c.json({ ok: true });
@@ -198,6 +201,7 @@ games.post("/draw", async (c) => {
   drawCards(g, playerId, 1);
   g.last_action = { type: "draw", by: playerId, text: "Drew 1" };
   g.current_turn = nextTurn(g);
+  g.last_turn_at = new Date().toISOString();
   await persist(g);
   return c.json({ ok: true });
 });

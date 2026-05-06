@@ -17,6 +17,8 @@ export default function GamePage() {
   const [pendingCard, setPendingCard] = useState<Card | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [cursors, setCursors] = useState<Record<string, { x: number; y: number; name: string; avatar: string }>>({});
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
 
   useEffect(() => {
     if (loading) return;
@@ -24,7 +26,7 @@ export default function GamePage() {
   }, [profile, loading, navigate, id]);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || !profile) return;
     const socket = getSocket();
 
     // Load initial state via REST
@@ -39,6 +41,16 @@ export default function GamePage() {
       setGame(data);
     });
 
+    socket.on("player:moved", (data: { playerId: string; x: number; y: number }) => {
+      const p = [...(game?.players || []), ...(game?.spectators || [])].find(x => x.id === data.playerId);
+      if (p) {
+        setCursors(prev => ({
+          ...prev,
+          [data.playerId]: { x: data.x, y: data.y, name: p.name, avatar: p.avatar }
+        }));
+      }
+    });
+
     socket.on("connect", joinRoom);
 
     if (socket.connected) {
@@ -47,13 +59,39 @@ export default function GamePage() {
       socket.connect();
     }
 
+    const handleMouseMove = (e: MouseEvent) => {
+      const x = (e.clientX / window.innerWidth) * 100;
+      const y = (e.clientY / window.innerHeight) * 100;
+      socket.emit("player:move", { gameId: id, playerId: profile.id, x, y });
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+
     return () => {
       socket.emit("leave", id);
       socket.off("game:update");
+      socket.off("player:moved");
       socket.off("connect", joinRoom);
+      window.removeEventListener("mousemove", handleMouseMove);
       socket.disconnect();
     };
-  }, [id, navigate]);
+  }, [id, navigate, profile, game?.players, game?.spectators]);
+
+  useEffect(() => {
+    if (game?.status !== "playing" || !game.last_turn_at) {
+      setTimeLeft(null);
+      return;
+    }
+
+    const interval = setInterval(() => {
+      const now = new Date().getTime();
+      const lastTurn = new Date(game.last_turn_at!).getTime();
+      const diff = Math.max(0, 60 - Math.floor((now - lastTurn) / 1000));
+      setTimeLeft(diff);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [game?.status, game?.last_turn_at]);
 
   const youId = profile?.id;
   const yourHand = useMemo(() => (youId && game ? game.hands[youId] ?? [] : []), [game, youId]);
@@ -80,17 +118,42 @@ export default function GamePage() {
     const winner = game.players.find((p) => p.id === game.winner_id);
     const youWon = game.winner_id === youId;
     return (
-      <main className="min-h-screen bg-table flex items-center justify-center p-4 text-center">
+      <main className="min-h-screen bg-table flex items-center justify-center p-4 text-center overflow-hidden relative">
         {seoBlock}
-        <div className="bg-card border border-border rounded-2xl p-8 max-w-md w-full shadow-card">
-          <div className="text-6xl mb-2">{youWon ? "🏆" : "🎬"}</div>
-          <h1 className="font-display text-4xl mb-1">{youWon ? "You Won!" : "Game Over"}</h1>
-          <p className="opacity-80 mb-6">{winner ? `${winner.avatar} ${winner.name} took the pot.` : "The dust has settled."}</p>
-          {(isPlayer || isSpectator) && (
-            <button onClick={async () => { if (youId) await api.rematch(game.id, youId); }}
-              className="w-full bg-sunset font-display h-12 text-lg rounded-lg mb-2">Rematch — join the table</button>
-          )}
-          <Link to="/"><button className="w-full border border-border font-display h-12 text-lg rounded-lg">Back to Saloon</button></Link>
+        {/* Confetti elements */}
+        {youWon && Array.from({ length: 50 }).map((_, i) => (
+          <div key={i} className="confetti" style={{
+            left: `${Math.random() * 100}%`,
+            backgroundColor: i % 3 === 0 ? "var(--color-accent)" : i % 3 === 1 ? "var(--color-primary)" : "#fff",
+            animationDelay: `${Math.random() * 3}s`,
+            animationDuration: `${2 + Math.random() * 2}s`
+          }} />
+        ))}
+        
+        <div className="bg-card/95 backdrop-blur-xl border-2 border-amber-200/20 rounded-3xl p-8 sm:p-12 max-w-lg w-full shadow-2xl relative z-10 animate-deal">
+          <div className="text-8xl mb-6 animate-float">{youWon ? "🏆" : "🏜️"}</div>
+          <h1 className="font-display text-5xl sm:text-6xl mb-4 bg-gradient-to-b from-amber-200 to-amber-500 bg-clip-text text-transparent">
+            {youWon ? "VICTORY!" : "DEFEAT"}
+          </h1>
+          <p className="text-xl opacity-90 mb-8 font-display">
+            {winner ? (
+              <span><span className="text-3xl mr-2">{winner.avatar}</span> {winner.name} swept the table!</span>
+            ) : "The dust has settled."}
+          </p>
+          
+          <div className="space-y-3">
+            {(isPlayer || isSpectator) && (
+              <button onClick={async () => { if (youId) await api.rematch(game.id, youId); }}
+                className="w-full bg-sunset font-display h-16 text-xl rounded-xl shadow-glow hover:scale-[1.02] active:scale-[0.98] transition-transform">
+                RAISE THE STAKES (REMATCH)
+              </button>
+            )}
+            <Link to="/" className="block">
+              <button className="w-full border-2 border-amber-200/20 bg-white/5 font-display h-14 text-lg rounded-xl hover:bg-white/10 transition-colors">
+                RETURN TO SALOON
+              </button>
+            </Link>
+          </div>
         </div>
       </main>
     );
@@ -125,71 +188,125 @@ export default function GamePage() {
   return (
     <main className="min-h-screen relative overflow-hidden flex flex-col bg-table">
       {seoBlock}
-      <div className="relative z-10 flex items-center justify-between px-2 sm:px-4 py-2 sm:py-3 bg-black/30 backdrop-blur border-b border-border gap-2">
+      
+      {/* Other players' cursors */}
+      {Object.entries(cursors).map(([pid, pos]) => (
+        pid !== youId && (
+          <div key={pid} className="cursor-follower" style={{ left: `${pos.x}%`, top: `${pos.y}%` }}>
+            <div className="relative">
+              <span className="text-xl drop-shadow-md">{pos.avatar}</span>
+              <span className="absolute left-full top-0 ml-1 px-1.5 py-0.5 bg-black/60 text-[10px] rounded whitespace-nowrap border border-white/10 backdrop-blur-sm">
+                {pos.name}
+              </span>
+            </div>
+          </div>
+        )
+      ))}
+
+      <div className="relative z-20 flex items-center justify-between px-2 sm:px-4 py-2 sm:py-3 bg-black/40 backdrop-blur-md border-b border-amber-200/10 gap-2">
         <button onClick={async () => { if (youId) await api.leaveGame(game.id, youId); navigate("/"); }}
-          className="font-display h-8 px-3 text-xs sm:text-sm rounded bg-[var(--color-destructive)]">← Leave</button>
-        <div className="text-center leading-tight">
-          <div className="text-[10px] opacity-70">ROOM</div>
-          <div className="font-display tracking-widest text-sm sm:text-base">{game.code}</div>
+          className="font-display h-9 px-4 text-xs sm:text-sm rounded-lg bg-destructive shadow-lg hover:opacity-90 transition-opacity">← Leave</button>
+        
+        <div className="flex items-center gap-4 sm:gap-8">
+          <div className="text-center leading-tight">
+            <div className="text-[10px] opacity-50 font-display">ROOM</div>
+            <div className="font-display tracking-[0.2em] text-sm sm:text-base text-amber-200">{game.code}</div>
+          </div>
+
+          {timeLeft !== null && (
+            <div className={cn(
+              "flex flex-col items-center justify-center min-w-[50px] p-1 rounded-lg border backdrop-blur-sm",
+              timeLeft <= 10 ? "bg-destructive/20 border-destructive animate-pulse" : "bg-white/5 border-white/10"
+            )}>
+              <div className="text-[9px] font-display opacity-60">TIMER</div>
+              <div className="font-display text-sm leading-none">{timeLeft}s</div>
+            </div>
+          )}
         </div>
-        <div className="text-[11px] opacity-80 max-w-[45%] truncate text-right">{game.last_action?.text}</div>
+
+        <div className="text-[11px] opacity-80 max-w-[40%] truncate text-right font-display italic text-amber-100/70">
+          {game.last_action?.text}
+        </div>
       </div>
 
       {isSpectator && (
-        <div className="bg-[var(--color-accent)]/20 border-b border-[var(--color-accent)]/40 text-center py-1.5 text-sm font-display">
-          👀 Spectating — you'll auto-join the next round
+        <div className="bg-accent/20 backdrop-blur-sm border-b border-accent/40 text-center py-2 text-sm font-display relative z-20 shadow-lg">
+          👀 Watching the showdown — you'll join the next round, partner!
         </div>
       )}
 
-      <div className="flex justify-center gap-2 sm:gap-8 mt-4 flex-wrap px-2">
-        {others.map((p) => (
-          <PlayerSeat key={p.id} player={p} cardCount={game.hands[p.id]?.length ?? 0}
-            isCurrent={game.current_turn === p.id} isHost={game.host_id === p.id} />
-        ))}
-      </div>
-
-      <div className="flex-1 flex items-center justify-center my-4 min-h-[140px]">
-        <div className="flex items-center gap-3 sm:gap-6">
-          <button onClick={onDraw} disabled={!isYourTurn} className="relative disabled:opacity-60">
-            <PlayingCard faceDown size="lg" />
-          </button>
-          <div className="relative">
-            {top && <PlayingCard card={top} size="lg" overrideSuit={game.current_suit ?? undefined} />}
-            {game.current_suit && top && (top.rank === "8" || top.rank === "K") && (
-              <div className="absolute -bottom-3 -right-3 bg-card border border-border rounded-full w-9 h-9 flex items-center justify-center text-2xl shadow-card"
-                style={{ color: SUIT_COLOR[game.current_suit] === "red" ? "oklch(0.55 0.22 25)" : "oklch(0.95 0 0)" }}>
-                {SUIT_SYMBOL[game.current_suit]}
-              </div>
-            )}
-          </div>
+      <div className="relative z-10 flex-1 flex flex-col">
+        <div className="flex justify-center gap-2 sm:gap-8 mt-6 flex-wrap px-2">
+          {others.map((p) => (
+            <PlayerSeat key={p.id} player={p} cardCount={game.hands[p.id]?.length ?? 0}
+              isCurrent={game.current_turn === p.id} isHost={game.host_id === p.id} />
+          ))}
         </div>
-      </div>
 
-      <div className="text-center mb-2">
-        {isYourTurn ? (
-          <div className="inline-block bg-[var(--color-accent)] text-[var(--color-accent-foreground)] px-4 py-1 rounded-full font-display text-sm animate-pulse-glow">Your turn, partner</div>
-        ) : (
-          <div className="opacity-70 text-sm">Waiting for {game.players.find((p) => p.id === game.current_turn)?.name}…</div>
-        )}
-        {error && <div className="text-sm mt-1" style={{ color: "oklch(0.7 0.2 25)" }}>{error}</div>}
-      </div>
+        <div className="flex-1 flex items-center justify-center my-4 min-h-[160px]">
+          <div className="flex items-center gap-4 sm:gap-12 relative">
+             {/* Deck shadow effect */}
+            <div className="absolute -left-1 top-1 w-24 h-36 bg-black/20 rounded-xl blur-sm -z-10"></div>
+            
+            <button onClick={onDraw} disabled={!isYourTurn} className="relative disabled:opacity-60 hover:scale-105 active:scale-95 transition-transform group">
+              <PlayingCard faceDown size="lg" />
+              <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-black/60 px-2 py-0.5 rounded text-[10px] opacity-0 group-hover:opacity-100 transition-opacity">DRAW</div>
+            </button>
 
-      {isPlayer ? (
-        <div className="pb-3 px-1">
-          <div className="flex justify-start sm:justify-center gap-1 sm:gap-2 overflow-x-auto py-2 px-1 snap-x snap-mandatory">
-            {yourHand.map((card, i) => {
-              const playable = !!top && !!game.current_suit && isYourTurn && canPlay(card, top, game.current_suit);
-              return (
-                <div key={card.id} className="animate-deal snap-center shrink-0" style={{ animationDelay: `${i * 30}ms` }}>
-                  <PlayingCard card={card} size="md" onClick={() => onPlay(card)} disabled={!playable} highlight={playable} />
+            <div className="relative group">
+              {/* Discard pile depth effect */}
+              {game.discard.length > 1 && (
+                <div className="absolute inset-0 translate-x-1 translate-y-1 rotate-3 -z-10">
+                   <PlayingCard card={game.discard[game.discard.length - 2]} size="lg" disabled />
                 </div>
-              );
-            })}
+              )}
+              
+              {top && <PlayingCard card={top} size="lg" overrideSuit={game.current_suit ?? undefined} />}
+              
+              {game.current_suit && top && (top.rank === "8" || top.rank === "K") && (
+                <div className="absolute -bottom-4 -right-4 bg-amber-50 border-2 border-amber-200 rounded-full w-12 h-12 flex items-center justify-center text-3xl shadow-2xl animate-bounce"
+                  style={{ color: SUIT_COLOR[game.current_suit] === "red" ? "oklch(0.55 0.22 25)" : "oklch(0.2 0.02 30)" }}>
+                  {SUIT_SYMBOL[game.current_suit]}
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      ) : (
-        <div className="pb-6 text-center opacity-70 text-sm">Watching the showdown — wait for this round to end to play.</div>
-      )}
+
+        <div className="text-center mb-4 relative z-20">
+          {isYourTurn ? (
+            <div className="inline-block bg-accent text-accent-foreground px-6 py-2 rounded-full font-display text-base shadow-glow animate-pulse-glow">
+              Your move, partner! 🤠
+            </div>
+          ) : (
+            <div className="bg-black/20 backdrop-blur-sm inline-block px-4 py-1.5 rounded-full border border-white/5 text-sm">
+              <span className="opacity-60">Waitin' for </span>
+              <span className="font-display text-amber-200">{game.players.find((p) => p.id === game.current_turn)?.name}</span>
+              <span className="opacity-60">…</span>
+            </div>
+          )}
+          {error && <div className="text-sm mt-2 font-display bg-destructive/10 py-1 px-4 inline-block rounded-lg" style={{ color: "oklch(0.7 0.2 25)" }}>{error}</div>}
+        </div>
+
+        {isPlayer ? (
+          <div className="pb-6 px-1 bg-gradient-to-t from-black/40 to-transparent pt-4">
+            <div className="flex justify-start sm:justify-center gap-1 sm:gap-3 overflow-x-auto py-4 px-4 snap-x snap-mandatory no-scrollbar">
+              {yourHand.map((card, i) => {
+                const playable = !!top && !!game.current_suit && isYourTurn && canPlay(card, top, game.current_suit);
+                return (
+                  <div key={card.id} className="animate-deal snap-center shrink-0" style={{ animationDelay: `${i * 50}ms` }}>
+                    <PlayingCard card={card} size="md" onClick={() => onPlay(card)} disabled={!playable} highlight={playable} />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div className="pb-10 text-center bg-black/40 backdrop-blur-sm pt-6 border-t border-white/5">
+            <p className="opacity-60 text-sm font-display tracking-wide italic">Watching the showdown — wait for this round to end to join the table.</p>
+          </div>
+        )}
+      </div>
 
       {pendingCard && <SuitPicker onPick={pickSuit} onCancel={() => setPendingCard(null)} />}
     </main>

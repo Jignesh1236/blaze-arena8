@@ -6,6 +6,7 @@ import { Server as SocketIOServer } from "socket.io";
 import { games } from "./routes/games.js";
 import { gameEmitter } from "./lib/emitter.js";
 import { store } from "./lib/store.js";
+import { forceSkipTurn } from "./lib/engine.js";
 import type { GameRow } from "./lib/game.js";
 
 const app = new Hono();
@@ -73,9 +74,27 @@ io.on("connection", (socket) => {
   socket.on("leave:lobby", () => {
     socket.leave("lobby");
   });
+
+  socket.on("player:move", (data: { gameId: string; playerId: string; x: number; y: number }) => {
+    socket.to(`game:${data.gameId}`).emit("player:moved", data);
+  });
 });
 
 gameEmitter.on("game:update", (g: GameRow) => {
   io.to(`game:${g.id}`).emit("game:update", g);
   broadcastLobby();
 });
+
+// Inactivity check every 5 seconds
+setInterval(async () => {
+  const allGames = store.getAll();
+  const now = new Date().getTime();
+  for (const g of allGames) {
+    if (g.status === "playing" && g.last_turn_at) {
+      const lastTurn = new Date(g.last_turn_at).getTime();
+      if (now - lastTurn > 60000) {
+        await forceSkipTurn(g.id);
+      }
+    }
+  }
+}, 5000);
