@@ -72,6 +72,9 @@ export const store = {
     games[g.id] = g;
     dirty = true;
   },
+  getAll(): GameRow[] {
+    return Object.values(games);
+  },
   delete(id: string) {
     delete games[id];
     dirty = true;
