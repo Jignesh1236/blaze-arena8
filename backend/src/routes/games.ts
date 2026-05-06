@@ -6,6 +6,12 @@ import { HAND_SIZE, drawCards, loadGame, nextTurn, persist, suitSym } from "../l
 
 export const games = new Hono();
 
+games.get("/:id", async (c) => {
+  const g = store.get(c.req.param("id"));
+  if (!g) return c.json({ error: "Game not found" }, 404);
+  return c.json(g);
+});
+
 const playerSchema = z.object({
   id: z.string().min(1).max(64),
   name: z.string().min(1).max(24),

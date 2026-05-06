@@ -1,5 +1,6 @@
 import { store } from "./store.js";
 import { buildDeck, canPlay, shuffle, suitSym, type Card, type GameRow, type Suit } from "./game.js";
+import { emitGameUpdate } from "./emitter.js";
 
 export const HAND_SIZE = 7;
 
@@ -38,6 +39,7 @@ export function drawCards(g: GameRow, userId: string, n: number) {
 
 export async function persist(g: GameRow) {
   store.put(g);
+  emitGameUpdate(g);
 }
 
 export { buildDeck, canPlay, suitSym, type Card, type GameRow, type Suit };
