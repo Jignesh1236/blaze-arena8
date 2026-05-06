@@ -79,9 +79,10 @@ export default function HomePage() {
   return (
     <main className="min-h-screen relative overflow-hidden bg-table">
       <Seo
-        title="Blazing 8s — Real-time Multiplayer Crazy Eights"
-        description="Wild West twist on Crazy Eights. Real-time multiplayer card showdown. No login — pick a handle, share a code, deal the cards."
+        title="Blazing 8s — Free Real-time Multiplayer Crazy Eights Card Game"
+        description="Play Crazy Eights online free with a Wild West twist. No login needed — pick a handle, create a room, share the code and deal the cards. Up to 6 players."
         path="/"
+        keywords="crazy eights online free, multiplayer card game browser, wild west card game, play crazy eights with friends, online card game no signup, blazing 8s, real-time card game, crazy 8s online multiplayer"
       />
       <div className="relative z-10 max-w-5xl mx-auto px-4 py-10 sm:py-16">
         <header className="flex items-center justify-between mb-12">
@@ -106,8 +107,11 @@ export default function HomePage() {
           <h1 className="font-display text-5xl sm:text-7xl drop-shadow-lg">
             Blazing <span style={{ color: "oklch(0.78 0.16 70)" }}>8s</span>
           </h1>
+          <p className="mt-1 text-sm font-display tracking-widest uppercase opacity-60" style={{ color: "oklch(0.85 0.04 70)" }}>
+            Multiplayer Crazy Eights — Wild West Edition
+          </p>
           <p className="mt-3 text-lg max-w-xl mx-auto" style={{ color: "oklch(0.85 0.04 70)" }}>
-            No login. Pick a handle, grab your posse — real-time multiplayer Crazy Eights.
+            No login. Pick a handle, grab your posse — real-time multiplayer Crazy Eights. Free to play, up to 6 players.
           </p>
 
           <div className="mt-10 max-w-md mx-auto bg-card/90 backdrop-blur border border-border rounded-2xl p-6 shadow-card text-left">

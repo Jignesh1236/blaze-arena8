@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /game/
+
+Sitemap: https://blazing8s.com/sitemap.xml

@@ -5,9 +5,10 @@ export default function HowToPlay() {
   return (
     <main className="min-h-screen bg-table">
       <Seo
-        title="How to Play Blazing 8s — Wild West Crazy Eights Rules"
-        description="Full rules for Blazing 8s. Match suits and ranks, use Wild 8s, Switcheroo, +1, Skip, and Reverse cards. First to empty their hand wins."
+        title="How to Play Blazing 8s — Crazy Eights Rules & Special Cards Guide"
+        description="Learn Blazing 8s rules: match suits and ranks, use Wild 8s to change suit, Switcheroo (K) swaps hands, +1 draws extra cards, Skip and Reverse control the round. First to empty hand wins!"
         path="/how-to-play"
+        keywords="crazy eights rules, how to play crazy eights, blazing 8s rules, wild card game rules, switcheroo card game, crazy 8s special cards, card game instructions"
       />
       <article className="max-w-2xl mx-auto px-4 py-10">
         <Link to="/" className="text-sm opacity-80">← Home</Link>
