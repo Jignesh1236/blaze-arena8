@@ -23,6 +23,7 @@ export default function GamePage() {
   const [error, setError] = useState("");
   const [cursors, setCursors] = useState<Record<string, { x: number; y: number; name: string; avatar: string }>>({});
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const [animatingCard, setAnimatingCard] = useState<{ card: Card; from: { x: number; y: number } } | null>(null);
 
   useEffect(() => {
     if (loading) return;
@@ -167,6 +168,11 @@ export default function GamePage() {
     if (!isYourTurn || !game || !youId || busy || !top || !game.current_suit) return;
     if (!canPlay(card, top, game.current_suit)) { setError("Can't play that card"); return; }
     if (card.rank === "8") { setPendingCard(card); return; }
+    
+    // Trigger animation
+    setAnimatingCard({ card, from: { x: 50, y: 85 } }); // From bottom center
+    setTimeout(() => setAnimatingCard(null), 600);
+
     setBusy(true); setError("");
     try { await api.playCard(game.id, youId, card.id); }
     catch (e) { const m = (e as Error).message; if (m !== "Not your turn") setError(m); }
@@ -188,6 +194,22 @@ export default function GamePage() {
   }
 
   const others = youId ? game.players.filter((p) => p.id !== youId) : game.players;
+
+  const positions = useMemo(() => {
+    const count = others.length;
+    if (count === 0) return [];
+    return others.map((_, i) => {
+      let angle;
+      if (count === 1) angle = 90;
+      else angle = 180 - (i * (180 / (count - 1)));
+      const rad = (angle * Math.PI) / 180;
+      const rx = window.innerWidth < 640 ? 40 : 38;
+      const ry = window.innerWidth < 640 ? 25 : 30;
+      const left = 50 + rx * Math.cos(rad);
+      const top = 35 - ry * Math.sin(rad);
+      return { top: `${top}%`, left: `${left}%` };
+    });
+  }, [others.length]);
 
   return (
     <main className="min-h-screen relative overflow-hidden flex flex-col bg-table">
@@ -240,21 +262,56 @@ export default function GamePage() {
       )}
 
       <div className="relative z-10 flex-1 flex flex-col">
-        <div className="flex justify-center gap-2 sm:gap-8 mt-6 flex-wrap px-2">
-          {others.map((p) => (
-            <PlayerSeat key={p.id} player={p} cardCount={game.hands[p.id]?.length ?? 0}
-              isCurrent={game.current_turn === p.id} isHost={game.host_id === p.id} />
-          ))}
-        </div>
+        {/* The Round Table Layout */}
+        <div className="relative flex-1 min-h-[400px]">
+          {/* Table Indicator Ring */}
+          <div className="absolute top-[45%] left-1/2 -translate-x-1/2 -translate-y-1/2 w-[75vw] h-[75vw] max-w-[500px] max-h-[500px] border-4 border-dashed border-amber-200/10 rounded-full pointer-events-none">
+             {/* Direction Arrows */}
+             <div className={cn(
+               "absolute inset-0 transition-all duration-1000",
+               game.direction === 1 ? "animate-spin-slow" : "animate-spin-slow-reverse"
+             )}>
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div key={i} className="absolute text-amber-200/20 text-2xl" 
+                    style={{ 
+                      left: '50%', 
+                      top: '50%', 
+                      transform: `rotate(${i * 45}deg) translateY(-250px) rotate(${game.direction === 1 ? 90 : -90}deg)` 
+                    }}>
+                    {game.direction === 1 ? "→" : "←"}
+                  </div>
+                ))}
+             </div>
+          </div>
 
-        <div className="flex-1 flex items-center justify-center my-4 min-h-[160px]">
-          <div className="flex items-center gap-4 sm:gap-12 relative">
+          {others.map((p, i) => (
+            <div key={p.id} className="absolute -translate-x-1/2 -translate-y-1/2 transition-all duration-700" style={positions[i]}>
+              <PlayerSeat player={p} cardCount={game.hands[p.id]?.length ?? 0}
+                isCurrent={game.current_turn === p.id} isHost={game.host_id === p.id} />
+            </div>
+          ))}
+
+          {/* Center Area: Deck and Discard */}
+          <div className="absolute top-[45%] left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-4 sm:gap-12">
+            {/* Animating Card */}
+            {animatingCard && (
+              <div className="fixed z-[100] pointer-events-none transition-all duration-500 ease-in-out"
+                style={{
+                  left: `${animatingCard.from.x}%`,
+                  top: `${animatingCard.from.y}%`,
+                  transform: 'translate(-50%, -50%) scale(0.8)',
+                  animation: 'play-card-anim 0.5s forwards'
+                }}>
+                <PlayingCard card={animatingCard.card} size="md" />
+              </div>
+            )}
+
              {/* Deck shadow effect */}
             <div className="absolute -left-1 top-1 w-24 h-36 bg-black/20 rounded-xl blur-sm -z-10"></div>
             
             <button onClick={onDraw} disabled={!isYourTurn} className="relative disabled:opacity-60 hover:scale-105 active:scale-95 transition-transform group">
               <PlayingCard faceDown size="lg" />
-              <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-black/60 px-2 py-0.5 rounded text-[10px] opacity-0 group-hover:opacity-100 transition-opacity">DRAW</div>
+              <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-black/60 px-2 py-0.5 rounded text-[10px] opacity-0 group-hover:opacity-100 transition-opacity uppercase tracking-tighter">DRAW</div>
             </button>
 
             <div className="relative group">
@@ -268,7 +325,7 @@ export default function GamePage() {
               {top && <PlayingCard card={top} size="lg" overrideSuit={game.current_suit ?? undefined} />}
               
               {game.current_suit && top && (top.rank === "8" || top.rank === "K") && (
-                <div className="absolute -bottom-4 -right-4 bg-amber-50 border-2 border-amber-200 rounded-full w-12 h-12 flex items-center justify-center text-3xl shadow-2xl animate-bounce"
+                <div className="absolute -bottom-4 -right-4 bg-amber-50 border-2 border-amber-200 rounded-full w-12 h-12 flex items-center justify-center text-3xl shadow-2xl"
                   style={{ color: SUIT_COLOR[game.current_suit] === "red" ? "oklch(0.55 0.22 25)" : "oklch(0.2 0.02 30)" }}>
                   {SUIT_SYMBOL[game.current_suit]}
                 </div>
@@ -279,7 +336,7 @@ export default function GamePage() {
 
         <div className="text-center mb-4 relative z-20">
           {isYourTurn ? (
-            <div className="inline-block bg-accent text-accent-foreground px-6 py-2 rounded-full font-display text-base shadow-glow animate-pulse-glow">
+            <div className="inline-block bg-accent text-accent-foreground px-6 py-2 rounded-full font-display text-base shadow-glow">
               Your move, partner! 🤠
             </div>
           ) : (
@@ -293,17 +350,48 @@ export default function GamePage() {
         </div>
 
         {isPlayer ? (
-          <div className="pb-6 px-1 bg-gradient-to-t from-black/40 to-transparent pt-4">
-            <div className="flex justify-start sm:justify-center gap-1 sm:gap-3 overflow-x-auto py-4 px-4 snap-x snap-mandatory no-scrollbar">
+          <div className="pb-8 px-1 bg-gradient-to-t from-black/40 to-transparent pt-6">
+            <div className="flex justify-center -space-x-6 sm:-space-x-8 overflow-x-auto py-12 px-8 no-scrollbar min-h-[200px] items-end relative">
+               {/* Your Avatar at the bottom center of the table area */}
+               <div className="absolute -top-6 left-1/2 -translate-x-1/2 -translate-y-full opacity-50 scale-75 pointer-events-none">
+                  <PlayerSeat player={profile!} cardCount={yourHand.length} isCurrent={isYourTurn} />
+               </div>
+
               {yourHand.map((card, i) => {
                 const playable = !!top && !!game.current_suit && isYourTurn && canPlay(card, top, game.current_suit);
                 return (
-                  <div key={card.id} className="animate-deal snap-center shrink-0" style={{ animationDelay: `${i * 50}ms` }}>
+                  <div key={card.id} className="animate-deal shrink-0 transition-all duration-200 hover:z-50 hover:-translate-y-4" style={{ animationDelay: `${i * 50}ms`, zIndex: i }}>
                     <PlayingCard card={card} size="md" onClick={() => onPlay(card)} disabled={!playable} highlight={playable} />
                   </div>
                 );
               })}
             </div>
+          </div>
+        ) : isSpectator ? (
+          <div className="pb-8 px-1 bg-gradient-to-t from-black/20 to-transparent pt-6 border-t border-white/5">
+             <div className="text-center mb-4 text-xs font-display opacity-50 tracking-widest uppercase">Table View (All Hands)</div>
+             <div className="flex flex-wrap justify-center gap-6 px-4">
+               {game.players.map((p) => (
+                 <div key={p.id} className="flex flex-col items-center gap-2 bg-black/20 p-3 rounded-xl border border-white/5">
+                   <div className="flex -space-x-4">
+                     {Array.from({ length: Math.min(game.hands[p.id]?.length || 0, 5) }).map((_, i) => (
+                       <div key={i} style={{ zIndex: i }}>
+                         <PlayingCard faceDown size="sm" />
+                       </div>
+                     ))}
+                     {(game.hands[p.id]?.length || 0) > 5 && (
+                       <div className="w-10 h-[58px] bg-card border border-border rounded-lg flex items-center justify-center text-[10px] font-display z-10 translate-x-2">
+                         +{game.hands[p.id].length - 5}
+                       </div>
+                     )}
+                   </div>
+                   <div className="text-[10px] font-display opacity-70 flex items-center gap-1">
+                     <span>{p.avatar}</span>
+                     <span className="truncate max-w-[60px]">{p.name}</span>
+                   </div>
+                 </div>
+               ))}
+             </div>
           </div>
         ) : (
           <div className="pb-10 text-center bg-black/40 backdrop-blur-sm pt-6 border-t border-white/5">

@@ -55,7 +55,7 @@ export function PlayingCard({ card, faceDown, size = "md", onClick, disabled, hi
         sizes[size],
         !disabled && onClick && "cursor-pointer",
         disabled && onClick && "opacity-60 cursor-not-allowed grayscale-[0.5]",
-        highlight && "ring-4 ring-[var(--color-accent)] ring-offset-2 ring-offset-transparent -translate-y-4",
+        highlight && "ring-4 ring-[var(--color-accent)] ring-offset-2 ring-offset-transparent -translate-y-6 z-50 relative",
         isWild ? "border-[var(--color-accent)] bg-amber-100/50" : "border-amber-200",
       )}
       style={{ 
@@ -77,8 +77,8 @@ export function PlayingCard({ card, faceDown, size = "md", onClick, disabled, hi
       
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="relative">
-          {isSwitch ? <span className="text-[1.6em] animate-float" style={{ color: "oklch(0.78 0.16 70)" }}>⇄</span>
-            : card.rank === "8" ? <span className="text-[1.6em] animate-pulse" style={{ color: "oklch(0.78 0.16 70)" }}>★</span>
+          {isSwitch ? <span className="text-[1.6em]" style={{ color: "oklch(0.78 0.16 70)" }}>⇄</span>
+            : card.rank === "8" ? <span className="text-[1.6em]" style={{ color: "oklch(0.78 0.16 70)" }}>★</span>
             : <span className="text-[1.8em] opacity-90 drop-shadow-sm">{sym}</span>}
           
           {/* Subtle background suit symbol */}
