@@ -526,7 +526,7 @@ export default function GamePage() {
             {/* Hand cards — no ghost avatar, clean horizontal scroll */}
             <div
               className="flex items-end justify-center overflow-x-auto no-scrollbar"
-              style={{ minHeight: "96px", paddingBottom: "12px", paddingLeft: "8px", paddingRight: "8px" }}
+              style={{ minHeight: "96px", paddingTop: "20px", paddingBottom: "12px", paddingLeft: "8px", paddingRight: "8px" }}
             >
               {yourHand.map((card, i) => {
                 const playable = !!topCard && !!game.current_suit && isYourTurn && canPlay(card, topCard, game.current_suit);
@@ -536,7 +536,6 @@ export default function GamePage() {
                     className="animate-hand-deal flex-shrink-0 hover:-translate-y-4 transition-transform duration-150"
                     style={{
                       animationDelay: `${i * 35}ms`,
-                      zIndex: i,
                       marginLeft: i === 0 ? 0 : "-6px",
                     }}
                   >
