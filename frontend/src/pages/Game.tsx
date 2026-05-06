@@ -9,6 +9,10 @@ import { PlayerSeat } from "@/components/PlayerSeat";
 import { SuitPicker } from "@/components/SuitPicker";
 import { Seo } from "@/components/Seo";
 
+function cn(...parts: (string | false | null | undefined)[]) {
+  return parts.filter(Boolean).join(" ");
+}
+
 export default function GamePage() {
   const { id = "" } = useParams();
   const { profile, loading } = useGuest();
