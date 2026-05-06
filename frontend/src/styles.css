@@ -54,15 +54,15 @@ h1, h2, h3, .font-display {
     radial-gradient(ellipse at 50% 0%, oklch(0.45 0.10 35 / 0.9) 0%, transparent 70%),
     radial-gradient(ellipse at 50% 100%, oklch(0.22 0.05 30 / 0.8) 0%, transparent 60%);
   position: relative;
-}
 
-@utility bg-table::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-image: url("https://www.transparenttextures.com/patterns/wood-pattern.png");
-  opacity: 0.15;
-  pointer-events: none;
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: url("https://www.transparenttextures.com/patterns/wood-pattern.png");
+    opacity: 0.15;
+    pointer-events: none;
+  }
 }
 
 @keyframes win-confetti {
