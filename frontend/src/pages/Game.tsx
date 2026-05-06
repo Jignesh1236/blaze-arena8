@@ -57,6 +57,9 @@ export default function GamePage() {
     });
 
     socket.on("connect", joinRoom);
+    socket.on("connect_error", (err) => {
+      console.error("WebSocket connection error:", err.message);
+    });
 
     if (socket.connected) {
       joinRoom();
@@ -64,7 +67,13 @@ export default function GamePage() {
       socket.connect();
     }
 
+    let lastMove = 0;
     const handleMouseMove = (e: MouseEvent) => {
+      if (!socket.connected) return;
+      const now = Date.now();
+      if (now - lastMove < 50) return; // Throttle to 20fps
+      lastMove = now;
+
       const x = (e.clientX / window.innerWidth) * 100;
       const y = (e.clientY / window.innerHeight) * 100;
       socket.emit("player:move", { gameId: id, playerId: profile.id, x, y });
