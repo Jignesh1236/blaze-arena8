@@ -5,6 +5,7 @@ import { serve } from "@hono/node-server";
 import { Server as SocketIOServer } from "socket.io";
 import { games } from "./routes/games.js";
 import { gameEmitter } from "./lib/emitter.js";
+import { store } from "./lib/store.js";
 import type { GameRow } from "./lib/game.js";
 
 const app = new Hono();
@@ -43,6 +44,21 @@ const io = new SocketIOServer(server as any, {
   cors: { origin: "*", methods: ["GET", "POST"] },
 });
 
+function getPublicGames() {
+  return store.getAll().map((g) => ({
+    id: g.id,
+    code: g.code,
+    status: g.status,
+    players: g.players,
+    host_id: g.host_id,
+    updated_at: g.updated_at,
+  }));
+}
+
+function broadcastLobby() {
+  io.to("lobby").emit("lobby:update", getPublicGames());
+}
+
 io.on("connection", (socket) => {
   socket.on("join", (gameId: string) => {
     socket.join(`game:${gameId}`);
@@ -50,8 +66,16 @@ io.on("connection", (socket) => {
   socket.on("leave", (gameId: string) => {
     socket.leave(`game:${gameId}`);
   });
+  socket.on("join:lobby", () => {
+    socket.join("lobby");
+    socket.emit("lobby:update", getPublicGames());
+  });
+  socket.on("leave:lobby", () => {
+    socket.leave("lobby");
+  });
 });
 
 gameEmitter.on("game:update", (g: GameRow) => {
   io.to(`game:${g.id}`).emit("game:update", g);
+  broadcastLobby();
 });
