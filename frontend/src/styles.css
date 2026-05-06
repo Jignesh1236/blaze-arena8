@@ -120,24 +120,6 @@ h1, h2, h3, .font-display {
   }
 }
 
-@keyframes spin-slow {
-  from { transform: translate(-50%, -50%) rotate(0deg); }
-  to { transform: translate(-50%, -50%) rotate(360deg); }
-}
-
-@keyframes spin-slow-reverse {
-  from { transform: translate(-50%, -50%) rotate(360deg); }
-  to { transform: translate(-50%, -50%) rotate(0deg); }
-}
-
-.animate-spin-slow {
-  animation: spin-slow 20s linear infinite;
-}
-
-.animate-spin-slow-reverse {
-  animation: spin-slow-reverse 20s linear infinite;
-}
-
 @keyframes pulse-glow {
   0%,100% { box-shadow: 0 0 0 0 oklch(0.78 0.16 70 / 60%); }
   50% { box-shadow: 0 0 0 12px oklch(0.78 0.16 70 / 0%); }

@@ -122,13 +122,41 @@ export default function GamePage() {
       if (count === 1) angle = 90;
       else angle = 180 - (i * (180 / (count - 1)));
       const rad = (angle * Math.PI) / 180;
-      const rx = window.innerWidth < 640 ? 40 : 38;
-      const ry = window.innerWidth < 640 ? 25 : 30;
+      const rx = window.innerWidth < 640 ? 42 : 40;
+      const ry = window.innerWidth < 640 ? 28 : 32;
       const left = 50 + rx * Math.cos(rad);
-      const top = 35 - ry * Math.sin(rad);
-      return { top: `${top}%`, left: `${left}%` };
+      const top = 40 - ry * Math.sin(rad);
+      return { top: `${top}%`, left: `${left}%`, angle };
     });
   }, [others.length]);
+
+  const arrows = useMemo(() => {
+    if (!game || game.status !== "playing") return [];
+    const allPlayersPos = [...positions, { left: "50%", top: "85%", angle: 270 }];
+    // Sort by angle to place arrows between them
+    allPlayersPos.sort((a, b) => a.angle - b.angle);
+    
+    const res = [];
+    for (let i = 0; i < allPlayersPos.length; i++) {
+      const p1 = allPlayersPos[i];
+      const p2 = allPlayersPos[(i + 1) % allPlayersPos.length];
+      
+      let midAngle = (p1.angle + p2.angle) / 2;
+      if (Math.abs(p1.angle - p2.angle) > 180) midAngle += 180;
+      
+      const rad = (midAngle * Math.PI) / 180;
+      const rx = window.innerWidth < 640 ? 32 : 30;
+      const ry = window.innerWidth < 640 ? 20 : 22;
+      const left = 50 + rx * Math.cos(rad);
+      const top = 45 - ry * Math.sin(rad);
+      
+      // Point arrow in game direction
+      const arrowRotation = midAngle + (game.direction === 1 ? 90 : -90);
+      
+      res.push({ left: `${left}%`, top: `${top}%`, rotate: `${arrowRotation}deg` });
+    }
+    return res;
+  }, [positions, game?.direction, game?.status]);
 
   const top = game?.discard?.[game.discard.length - 1] ?? null;
   const isYourTurn = game?.current_turn === youId && game?.status === "playing";
@@ -284,23 +312,18 @@ export default function GamePage() {
         {/* The Round Table Layout */}
         <div className="relative flex-1 min-h-[400px]">
           {/* Table Indicator Ring */}
-          <div className="absolute top-[45%] left-1/2 -translate-x-1/2 -translate-y-1/2 w-[75vw] h-[75vw] max-w-[500px] max-h-[500px] border-4 border-dashed border-amber-200/10 rounded-full pointer-events-none">
-             {/* Direction Arrows */}
-             <div className={cn(
-               "absolute inset-0 transition-all duration-1000",
-               game.direction === 1 ? "animate-spin-slow" : "animate-spin-slow-reverse"
-             )}>
-                {Array.from({ length: 8 }).map((_, i) => (
-                  <div key={i} className="absolute text-amber-200/20 text-2xl" 
-                    style={{ 
-                      left: '50%', 
-                      top: '50%', 
-                      transform: `rotate(${i * 45}deg) translateY(-250px) rotate(${game.direction === 1 ? 90 : -90}deg)` 
-                    }}>
-                    {game.direction === 1 ? "→" : "←"}
-                  </div>
-                ))}
-             </div>
+          <div className="absolute top-[45%] left-1/2 -translate-x-1/2 -translate-y-1/2 w-[85vw] h-[85vw] max-w-[600px] max-h-[600px] border-2 border-amber-200/5 rounded-full pointer-events-none shadow-[inset_0_0_50px_rgba(251,191,36,0.05)]">
+             {/* Direction Arrows between players */}
+             {arrows.map((arrow, i) => (
+               <div key={i} className="absolute text-amber-200/30 text-3xl font-bold transition-all duration-700"
+                 style={{ 
+                   left: arrow.left, 
+                   top: arrow.top, 
+                   transform: `translate(-50%, -50%) rotate(${arrow.rotate})` 
+                 }}>
+                 ➔
+               </div>
+             ))}
           </div>
 
           {others.map((p, i) => (
@@ -370,16 +393,16 @@ export default function GamePage() {
 
         {isPlayer ? (
           <div className="pb-8 px-1 bg-gradient-to-t from-black/40 to-transparent pt-6">
-            <div className="flex justify-center -space-x-6 sm:-space-x-8 overflow-x-auto py-12 px-8 no-scrollbar min-h-[200px] items-end relative">
-               {/* Your Avatar at the bottom center of the table area */}
-               <div className="absolute -top-6 left-1/2 -translate-x-1/2 -translate-y-full opacity-50 scale-75 pointer-events-none">
-                  <PlayerSeat player={profile!} cardCount={yourHand.length} isCurrent={isYourTurn} />
-               </div>
+            <div className="flex justify-center -space-x-4 sm:-space-x-6 overflow-x-auto py-12 px-8 no-scrollbar min-h-[220px] items-end relative">
+                {/* Your Avatar at the bottom center of the table area */}
+                <div className="absolute -top-10 left-1/2 -translate-x-1/2 -translate-y-full opacity-40 scale-75 pointer-events-none">
+                   <PlayerSeat player={profile!} cardCount={yourHand.length} isCurrent={isYourTurn} />
+                </div>
 
               {yourHand.map((card, i) => {
                 const playable = !!top && !!game.current_suit && isYourTurn && canPlay(card, top, game.current_suit);
                 return (
-                  <div key={card.id} className="animate-deal shrink-0 transition-all duration-200 hover:z-50 hover:-translate-y-4" style={{ animationDelay: `${i * 50}ms`, zIndex: i }}>
+                  <div key={card.id} className="animate-deal shrink-0 transition-all duration-200 hover:z-[60] hover:-translate-y-8" style={{ animationDelay: `${i * 50}ms`, zIndex: i }}>
                     <PlayingCard card={card} size="md" onClick={() => onPlay(card)} disabled={!playable} highlight={playable} />
                   </div>
                 );
