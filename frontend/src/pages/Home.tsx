@@ -17,6 +17,8 @@ export default function HomePage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [games, setGames] = useState<PublicGame[]>([]);
+  const [customRoomCode, setCustomRoomCode] = useState("");
+  const [showCustomCode, setShowCustomCode] = useState(false);
 
   useEffect(() => {
     const socket = getSocket();
@@ -52,7 +54,11 @@ export default function HomePage() {
   async function handleCreate() {
     const p = ensureProfile(); if (!p) return;
     setBusy(true); setError("");
-    try { const r = await api.createGame(p); navigate(`/game/${r.id}`); }
+    try {
+      const customCode = showCustomCode ? customRoomCode.trim().toUpperCase() : undefined;
+      const r = await api.createGame(p, customCode);
+      navigate(`/game/${r.id}`);
+    }
     catch (e) { setError((e as Error).message); }
     finally { setBusy(false); }
   }
@@ -131,7 +137,31 @@ export default function HomePage() {
               </div>
             )}
 
-            <button onClick={handleCreate} disabled={busy || loading}
+            {/* Custom Room Code Toggle */}
+            <div className="mb-3">
+              <button
+                onClick={() => setShowCustomCode(!showCustomCode)}
+                className="text-sm underline opacity-70 hover:opacity-100"
+                type="button"
+              >
+                {showCustomCode ? "↩ Use auto-generated room code" : "✎ Use custom room code"}
+              </button>
+            </div>
+
+            {showCustomCode && (
+              <div className="mb-3">
+                <input
+                  value={customRoomCode}
+                  onChange={(e) => setCustomRoomCode(e.target.value.toUpperCase())}
+                  maxLength={8}
+                  placeholder="CUSTOM CODE (e.g. JOHN99)"
+                  className="w-full font-display tracking-widest text-center text-lg uppercase px-3 py-2 rounded-lg bg-black/30 border border-border outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+                />
+                <p className="text-xs mt-1 opacity-60">3-8 letters/numbers only</p>
+              </div>
+            )}
+
+            <button onClick={handleCreate} disabled={busy || loading || (showCustomCode && !customRoomCode.trim())}
               className="w-full h-14 text-lg font-display bg-sunset border-2 border-amber-200/30 rounded-lg hover:opacity-90 shadow-glow disabled:opacity-60">
               🤠 Start a Showdown
             </button>
@@ -194,7 +224,16 @@ export default function HomePage() {
           {/* Banner Ad */}
           <div className="mt-10 flex justify-center">
             <div id="banner-ad-container" className="bg-card/80 backdrop-blur border border-border rounded-xl p-2 shadow-card" style={{ minWidth: '468px', minHeight: '60px' }}>
-              {/* Banner ad loads here */}
+              <script dangerouslySetInnerHTML={{__html: `
+                atOptions = {
+                  'key': '0ceec5a7bf06f1913d15695622a746b7',
+                  'format': 'iframe',
+                  'height': 60,
+                  'width': 468,
+                  'params': {}
+                };
+              `}} />
+              <script src="https://www.highperformanceformat.com/0ceec5a7bf06f1913d15695622a746b7/invoke.js"></script>
             </div>
           </div>
 
