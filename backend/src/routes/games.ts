@@ -128,12 +128,12 @@ games.post("/play", async (c) => {
   const top = g.discard[g.discard.length - 1];
   if (!g.current_suit) return c.json({ error: "Bad state" }, 400);
   if (!canPlay(card, top, g.current_suit)) return c.json({ error: "Illegal move" }, 400);
-  if ((card.rank === "8" || card.rank === "K") && !chosenSuit) return c.json({ error: "Choose a suit" }, 400);
+  if (card.rank === "8" && !chosenSuit) return c.json({ error: "Choose a suit" }, 400);
 
   hand.splice(cardIdx, 1);
   g.hands[playerId] = hand;
   g.discard.push(card);
-  g.current_suit = card.rank === "8" || card.rank === "K" ? chosenSuit! : card.suit;
+  g.current_suit = card.rank === "8" ? chosenSuit! : (card.suit === "wild" ? g.current_suit : card.suit);
 
   let skip = 0;
   let actionText = `Played ${card.rank}${suitSym(card.suit)}`;
@@ -151,7 +151,6 @@ games.post("/play", async (c) => {
       g.hands[nextId] = mine;
       actionText += " — Switcheroo! 🔄";
     }
-    actionText += ` — chose ${chosenSuit}`;
   } else if (card.rank === "J") {
     skip = 1;
     actionText += " — skip!";
