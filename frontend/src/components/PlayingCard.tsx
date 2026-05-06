@@ -60,7 +60,7 @@ export function PlayingCard({ card, faceDown, size = "md", onClick, disabled, hi
         sizes[size],
         onClick && !disabled && "cursor-pointer",
         disabled && onClick && "opacity-55 cursor-not-allowed",
-        highlight && "ring-4 ring-[var(--color-accent)] ring-offset-1 ring-offset-transparent -translate-y-5 z-50 relative",
+        highlight && "ring-4 ring-[var(--color-accent)] ring-offset-1 ring-offset-transparent -translate-y-2 z-50 relative",
         isWild ? "border-amber-400 bg-gradient-to-br from-amber-50 to-yellow-100" : "border-gray-200",
       )}
       style={{ color: colorHex }}
