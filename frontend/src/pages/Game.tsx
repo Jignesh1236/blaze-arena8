@@ -8,6 +8,17 @@ import { PlayingCard } from "@/components/PlayingCard";
 import { PlayerSeat } from "@/components/PlayerSeat";
 import { SuitPicker } from "@/components/SuitPicker";
 import { Seo } from "@/components/Seo";
+import { VoicePanel } from "@/components/VoicePanel";
+import { useVoiceChat } from "@/hooks/useVoiceChat";
+
+interface ChatMsg {
+  id: string;
+  playerId: string;
+  name: string;
+  avatar: string;
+  text: string;
+  ts: number;
+}
 
 function cn(...parts: (string | false | null | undefined)[]) {
   return parts.filter(Boolean).join(" ");
@@ -44,6 +55,16 @@ export default function GamePage() {
   const [reverseFlash, setReverseFlash] = useState<string | null>(null);
   const [switchOverlay, setSwitchOverlay] = useState<SwitchOverlay | null>(null);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const [chatMsgs, setChatMsgs] = useState<ChatMsg[]>([]);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatInput, setChatInput] = useState("");
+  const [chatUnread, setChatUnread] = useState(0);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatInputRef = useRef<HTMLInputElement>(null);
+
+  const youId = profile?.id;
+  const { state: voiceState, enable: voiceEnable, disable: voiceDisable, toggleMute: voiceToggleMute, changeMic: voiceChangeMic, setVolume: voiceSetVolume } =
+    useVoiceChat(id, youId ?? "");
 
   function addTimer(t: ReturnType<typeof setTimeout>) {
     timersRef.current.push(t);
@@ -86,19 +107,49 @@ export default function GamePage() {
     if (!profile) navigate(`/auth?next=/game/${id}`);
   }, [profile, loading, navigate, id]);
 
+  // Refs so handlers always see latest values without stale closures
+  const gameRef = useRef(game);
+  useEffect(() => { gameRef.current = game; }, [game]);
+  const chatOpenRef = useRef(chatOpen);
+  useEffect(() => { chatOpenRef.current = chatOpen; }, [chatOpen]);
+
+  // Connect socket on mount, disconnect only on full unmount
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket.connected) socket.connect();
+    return () => { socket.disconnect(); };
+  }, []);
+
+  // Register game room listeners — re-runs only when room or profile changes
   useEffect(() => {
     if (!id || !profile) return;
     const socket = getSocket();
+
     api.getGame(id).then(setGame).catch(() => navigate("/"));
 
+    // Named handler refs so socket.off removes exactly the right ones
     function joinRoom() { socket.emit("join", id); }
-    socket.on("game:update", setGame);
-    socket.on("player:moved", (data: { playerId: string; x: number; y: number }) => {
-      const p = [...(game?.players || []), ...(game?.spectators || [])].find(x => x.id === data.playerId);
+
+    function onGameUpdate(g: GameRow) { setGame(g); }
+    function onChatHistory(msgs: ChatMsg[]) { setChatMsgs(msgs); }
+    function onChatMessage(msg: ChatMsg) {
+      setChatMsgs(prev => [...prev, msg]);
+      if (!chatOpenRef.current) setChatUnread(prev => prev + 1);
+    }
+    function onPlayerMoved(data: { playerId: string; x: number; y: number }) {
+      const g = gameRef.current;
+      const p = [...(g?.players || []), ...(g?.spectators || [])].find(x => x.id === data.playerId);
       if (p) setCursors(prev => ({ ...prev, [data.playerId]: { x: data.x, y: data.y, name: p.name, avatar: p.avatar } }));
-    });
+    }
+
     socket.on("connect", joinRoom);
-    if (socket.connected) joinRoom(); else socket.connect();
+    socket.on("game:update", onGameUpdate);
+    socket.on("chat:history", onChatHistory);
+    socket.on("chat:message", onChatMessage);
+    socket.on("player:moved", onPlayerMoved);
+
+    // If already connected, join immediately; connect event will handle reconnects
+    if (socket.connected) joinRoom();
 
     let lastMove = 0;
     const handleMouseMove = (e: MouseEvent) => {
@@ -112,13 +163,15 @@ export default function GamePage() {
 
     return () => {
       socket.emit("leave", id);
-      socket.off("game:update", setGame);
-      socket.off("player:moved");
       socket.off("connect", joinRoom);
+      socket.off("game:update", onGameUpdate);
+      socket.off("chat:history", onChatHistory);
+      socket.off("chat:message", onChatMessage);
+      socket.off("player:moved", onPlayerMoved);
       window.removeEventListener("mousemove", handleMouseMove);
-      socket.disconnect();
+      // Do NOT disconnect here — socket stays alive for the session
     };
-  }, [id, navigate, profile, game?.players, game?.spectators]);
+  }, [id, profile, navigate]);
 
   useEffect(() => {
     if (game?.status !== "playing" || !game.last_turn_at) { setTimeLeft(null); return; }
@@ -129,26 +182,25 @@ export default function GamePage() {
     return () => clearInterval(interval);
   }, [game?.status, game?.last_turn_at]);
 
-  const youId = profile?.id;
   const yourHand = useMemo(() => (youId && game ? game.hands[youId] ?? [] : []), [game, youId]);
   const others = useMemo(() => {
     if (!game) return [];
     return youId ? game.players.filter(p => p.id !== youId) : game.players;
   }, [game, youId]);
 
-  // Better positions — 2-player opponent never behind header, all clamped to visible area
+  // Positions — players sit ON the ring border
   const positions = useMemo(() => {
     const count = others.length;
     if (count === 0) return [];
-    if (count === 1) return [{ top: "14%", left: "50%", angle: 90 }];
+    if (count === 1) return [{ top: "12%", left: "50%", angle: 90 }];
     return others.map((_, i) => {
       const angle = 180 - (i * (180 / (count - 1)));
       const rad = (angle * Math.PI) / 180;
       const isMobile = window.innerWidth < 640;
-      const rx = isMobile ? 37 : 36;
-      const ry = isMobile ? 22 : 26;
+      const rx = isMobile ? 36 : 35;
+      const ry = isMobile ? 23 : 27;
       const left = 50 + rx * Math.cos(rad);
-      const top = Math.max(13, 42 - ry * Math.sin(rad));
+      const top = Math.max(11, 43 - ry * Math.sin(rad));
       return { top: `${top}%`, left: `${left}%`, angle };
     });
   }, [others.length]);
@@ -199,21 +251,71 @@ export default function GamePage() {
     }
   }, [game?.last_action, game?.updated_at, getPlayerPos, launchCard, youId]);
 
+  // Auto-scroll chat to bottom
+  useEffect(() => {
+    if (chatOpen && chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [chatMsgs, chatOpen]);
+
+  // Reset unread when opening chat
+  useEffect(() => {
+    if (chatOpen) setChatUnread(0);
+  }, [chatOpen]);
+
+  function sendChat() {
+    const text = chatInput.trim();
+    if (!text || !profile || !id) return;
+    const socket = getSocket();
+    socket.emit("chat:send", { gameId: id, playerId: profile.id, name: profile.name, avatar: profile.avatar, text });
+    setChatInput("");
+    chatInputRef.current?.focus();
+  }
+
+  const nextPlayer = useMemo(() => {
+    if (!game || game.status !== "playing" || !game.current_turn) return null;
+    const idx = game.players.findIndex(p => p.id === game.current_turn);
+    if (idx === -1) return null;
+    const n = game.players.length;
+    const nextIdx = ((idx + game.direction) % n + n) % n;
+    return game.players[nextIdx] ?? null;
+  }, [game?.current_turn, game?.direction, game?.players, game?.status]);
+
+  // Arrows — sit on the ring's thick border (just past 50% radius)
   const arrows = useMemo(() => {
     if (!game || game.status !== "playing") return [];
-    const allPos = [...positions, { left: "50%", top: "86%", angle: 270 }];
+    const myPos = { angle: 270, playerId: youId ?? "" };
+    const allPos = [
+      ...positions.map((p, i) => ({ angle: p.angle, playerId: others[i]?.id ?? "" })),
+      myPos,
+    ];
     allPos.sort((a, b) => a.angle - b.angle);
+
+    const currentIdx = game.players.findIndex(p => p.id === game.current_turn);
+    const n = game.players.length;
+    const nextIdx = ((currentIdx + game.direction) % n + n) % n;
+    const nextId = game.players[nextIdx]?.id;
+
     return allPos.map((p1, i) => {
       const p2 = allPos[(i + 1) % allPos.length];
+      // Detect wrap-around pair (p1 > p2 because array is sorted ascending)
+      // e.g. 2 players at 90° and 270°: pair (270,90) wraps through 0°
       let midAngle = (p1.angle + p2.angle) / 2;
-      if (Math.abs(p1.angle - p2.angle) > 180) midAngle += 180;
+      if (p2.angle < p1.angle) midAngle += 180; // wrap-around: shift to correct arc midpoint
       const rad = (midAngle * Math.PI) / 180;
-      const isMobile = window.innerWidth < 640;
-      const left = 50 + (isMobile ? 28 : 27) * Math.cos(rad);
-      const top = 46 - (isMobile ? 17 : 20) * Math.sin(rad);
-      return { left: `${left}%`, top: `${top}%`, rotate: `${midAngle + (game.direction === 1 ? 90 : -90)}deg` };
+      // 51.5% places arrows in the center of the thick ring border
+      const ringLeft = 50 + 51.5 * Math.cos(rad);
+      const ringTop  = 50 - 51.5 * Math.sin(rad);
+      // Correct tangent: ▶ at 0° points right; clockwise on screen = 90-midAngle
+      const rotateDeg = (90 - midAngle) + (game.direction === -1 ? 180 : 0);
+
+      const isNextArrow =
+        (game.direction === 1 && (p1.playerId === game.current_turn || p2.playerId === nextId)) ||
+        (game.direction === -1 && (p2.playerId === game.current_turn || p1.playerId === nextId));
+
+      return { ringLeft, ringTop, rotateDeg, isNextArrow };
     });
-  }, [positions, game?.direction, game?.status]);
+  }, [positions, others, game?.direction, game?.status, game?.current_turn, game?.players, youId]);
 
   const topCard = game?.discard?.[game.discard.length - 1] ?? null;
   const isYourTurn = game?.current_turn === youId && game?.status === "playing";
@@ -424,35 +526,63 @@ export default function GamePage() {
         {/* Table with players and center pile */}
         <div className="relative flex-1 min-h-0">
 
-          {/* Table ring */}
+          {/* Table ring — thick warm border like reference */}
           <div
-            className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full pointer-events-none border border-amber-200/8"
+            className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full pointer-events-none"
             style={{
               top: "46%",
-              width: "min(82vw, 65vh)",
-              height: "min(82vw, 65vh)",
-              boxShadow: "inset 0 0 40px rgba(251,191,36,0.04)",
+              width: "min(80vw, 62vh)",
+              height: "min(80vw, 62vh)",
+              background: "radial-gradient(circle at 42% 38%, rgba(50,24,7,0.97) 0%, rgba(14,6,1,0.99) 100%)",
+              border: reverseFlash
+                ? "13px solid rgba(240,160,30,0.95)"
+                : "13px solid rgba(175,100,20,0.9)",
+              boxShadow: reverseFlash
+                ? "0 0 0 3px rgba(255,210,60,0.5), 0 0 0 6px rgba(200,130,20,0.2), inset 0 0 80px rgba(0,0,0,0.65), 0 12px 50px rgba(0,0,0,0.6), 0 0 40px rgba(240,160,30,0.25)"
+                : "0 0 0 3px rgba(220,140,25,0.4), 0 0 0 6px rgba(140,75,10,0.15), inset 0 0 80px rgba(0,0,0,0.65), 0 12px 50px rgba(0,0,0,0.6)",
+              transition: "border-color 0.4s, box-shadow 0.4s",
             }}
           >
-            {/* Direction arrows */}
+            {/* Connectors — sit ON the thick ring border */}
             {arrows.map((arrow, i) => (
               <div
                 key={i}
-                className={cn("absolute text-2xl font-bold transition-all duration-600", reverseFlash ? "text-amber-400/90" : "text-amber-200/25")}
+                className="absolute"
                 style={{
-                  left: arrow.left, top: arrow.top,
-                  transform: `translate(-50%, -50%) rotate(${arrow.rotate})`,
-                  filter: reverseFlash ? "drop-shadow(0 0 6px rgba(251,191,36,0.8))" : undefined,
-                  transition: "color 0.4s, filter 0.4s",
+                  left: `${arrow.ringLeft}%`,
+                  top: `${arrow.ringTop}%`,
+                  transform: "translate(-50%, -50%)",
+                  zIndex: arrow.isNextArrow ? 20 : 10,
                 }}
-              >➔</div>
+              >
+                {/* Arrow — no background, direction flips with game.direction */}
+                <div
+                  style={{
+                    transform: `rotate(${arrow.rotateDeg}deg)`,
+                    fontSize: arrow.isNextArrow ? "18px" : "13px",
+                    color: arrow.isNextArrow
+                      ? reverseFlash ? "rgba(255,230,60,1)" : "rgba(255,200,50,1)"
+                      : "rgba(200,130,30,0.45)",
+                    textShadow: arrow.isNextArrow
+                      ? reverseFlash
+                        ? "0 0 12px rgba(255,230,60,1), 0 0 24px rgba(255,200,40,0.8)"
+                        : "0 0 8px rgba(255,200,40,0.9), 0 0 18px rgba(255,180,20,0.5)"
+                      : "none",
+                    transition: "transform 0.65s cubic-bezier(0.34,1.56,0.64,1), color 0.3s, text-shadow 0.3s, font-size 0.3s",
+                    lineHeight: 1,
+                    userSelect: "none",
+                  }}
+                >
+                  ▶
+                </div>
+              </div>
             ))}
           </div>
 
           {/* Other players */}
           {others.map((p, i) => (
             <div key={p.id} className="absolute -translate-x-1/2 -translate-y-1/2 transition-all duration-700" style={positions[i]}>
-              <PlayerSeat player={p} cardCount={game.hands[p.id]?.length ?? 0} isCurrent={game.current_turn === p.id} isHost={game.host_id === p.id} />
+              <PlayerSeat player={p} cardCount={game.hands[p.id]?.length ?? 0} isCurrent={game.current_turn === p.id} isHost={game.host_id === p.id} isSpeaking={!!voiceState.speaking[p.id]} />
             </div>
           ))}
 
@@ -585,6 +715,94 @@ export default function GamePage() {
       </div>
 
       {pendingCard && <SuitPicker onPick={pickSuit} onCancel={() => setPendingCard(null)} />}
+
+      {/* ── Voice panel ── */}
+      <div className="fixed bottom-4 right-[4.5rem] z-[250]">
+        <VoicePanel
+          state={voiceState}
+          players={game?.players ?? []}
+          myPlayerId={youId ?? ""}
+          onEnable={voiceEnable}
+          onDisable={voiceDisable}
+          onToggleMute={voiceToggleMute}
+          onChangeMic={voiceChangeMic}
+          onSetVolume={voiceSetVolume}
+        />
+      </div>
+
+      {/* ── Chat panel ── */}
+      <div className="fixed bottom-4 right-3 z-[250] flex flex-col items-end gap-2">
+        {/* Chat window */}
+        {chatOpen && (
+          <div className="w-72 sm:w-80 flex flex-col rounded-2xl overflow-hidden border border-amber-200/15 shadow-2xl"
+               style={{ background: "rgba(10,6,4,0.94)", backdropFilter: "blur(16px)", maxHeight: "340px" }}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-3 py-2 border-b border-amber-200/10 flex-shrink-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-base">💬</span>
+                <span className="font-display text-xs text-amber-200/80 tracking-wide">SALOON CHAT</span>
+              </div>
+              <button onClick={() => setChatOpen(false)} className="text-amber-200/40 hover:text-amber-200/80 text-lg leading-none transition-colors">×</button>
+            </div>
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto px-2 py-2 space-y-1.5" style={{ minHeight: "160px", maxHeight: "240px" }}>
+              {chatMsgs.length === 0 && (
+                <div className="text-center text-[10px] font-display text-amber-200/25 mt-6 tracking-widest">No messages yet…</div>
+              )}
+              {chatMsgs.map(msg => (
+                <div key={msg.id} className={cn("flex gap-1.5 items-start", msg.playerId === youId ? "flex-row-reverse" : "flex-row")}>
+                  <span className="text-base flex-shrink-0 mt-0.5">{msg.avatar}</span>
+                  <div className={cn("max-w-[75%] flex flex-col", msg.playerId === youId ? "items-end" : "items-start")}>
+                    <span className="text-[9px] font-display opacity-40 mb-0.5 px-1">{msg.playerId === youId ? "You" : msg.name}</span>
+                    <div className={cn(
+                      "px-2.5 py-1.5 rounded-2xl text-xs leading-snug break-words",
+                      msg.playerId === youId
+                        ? "bg-amber-500/80 text-white rounded-tr-sm"
+                        : "bg-white/8 text-amber-100/90 rounded-tl-sm border border-white/5"
+                    )}>
+                      {msg.text}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <div ref={chatEndRef} />
+            </div>
+            {/* Input */}
+            <form
+              className="flex items-center gap-1.5 px-2 py-2 border-t border-amber-200/10 flex-shrink-0"
+              onSubmit={e => { e.preventDefault(); sendChat(); }}
+            >
+              <input
+                ref={chatInputRef}
+                value={chatInput}
+                onChange={e => setChatInput(e.target.value)}
+                maxLength={200}
+                placeholder="Type a message…"
+                className="flex-1 bg-white/6 border border-amber-200/10 rounded-xl px-3 py-1.5 text-xs text-amber-100 placeholder-amber-200/25 outline-none focus:border-amber-400/30 transition-colors font-sans"
+              />
+              <button
+                type="submit"
+                disabled={!chatInput.trim()}
+                className="w-8 h-8 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-30 flex items-center justify-center transition-colors text-sm flex-shrink-0"
+              >▶</button>
+            </form>
+          </div>
+        )}
+
+        {/* Toggle button */}
+        <button
+          onClick={() => setChatOpen(o => !o)}
+          className="relative w-12 h-12 rounded-full flex items-center justify-center border border-amber-200/20 shadow-xl transition-all hover:scale-105 active:scale-95"
+          style={{ background: chatOpen ? "rgba(251,191,36,0.18)" : "rgba(10,6,4,0.82)", backdropFilter: "blur(12px)" }}
+        >
+          <span className="text-xl">{chatOpen ? "✕" : "💬"}</span>
+          {!chatOpen && chatUnread > 0 && (
+            <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-amber-500 border-2 border-black flex items-center justify-center text-[9px] font-bold text-white">
+              {chatUnread > 9 ? "9+" : chatUnread}
+            </div>
+          )}
+        </button>
+      </div>
     </main>
   );
 }

@@ -19,6 +19,8 @@ export function buildDeck(): Card[] {
   }
   for (let i = 0; i < 4; i++) {
     deck.push({ id: `8-wild-${i}-${Math.random().toString(36).slice(2,7)}`, suit: "wild", rank: "8" });
+  }
+  for (let i = 0; i < 2; i++) {
     deck.push({ id: `K-wild-${i}-${Math.random().toString(36).slice(2,7)}`, suit: "wild", rank: "K" });
   }
   return shuffle(deck);

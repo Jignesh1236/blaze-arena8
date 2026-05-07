@@ -9,6 +9,21 @@ import { store } from "./lib/store.js";
 import { forceSkipTurn } from "./lib/engine.js";
 import type { GameRow } from "./lib/game.js";
 
+interface ChatMessage {
+  id: string;
+  playerId: string;
+  name: string;
+  avatar: string;
+  text: string;
+  ts: number;
+}
+
+const chatRooms = new Map<string, ChatMessage[]>();
+const MAX_CHAT = 100;
+
+// Voice chat rooms: gameId -> Map<playerId, socketId>
+const voiceRooms = new Map<string, Map<string, string>>();
+
 const app = new Hono();
 
 const allowedOrigins = (process.env.CORS_ORIGINS ?? "*")
@@ -63,6 +78,8 @@ function broadcastLobby() {
 io.on("connection", (socket) => {
   socket.on("join", (gameId: string) => {
     socket.join(`game:${gameId}`);
+    const history = chatRooms.get(gameId) ?? [];
+    socket.emit("chat:history", history);
   });
   socket.on("leave", (gameId: string) => {
     socket.leave(`game:${gameId}`);
@@ -77,6 +94,66 @@ io.on("connection", (socket) => {
 
   socket.on("player:move", (data: { gameId: string; playerId: string; x: number; y: number }) => {
     socket.to(`game:${data.gameId}`).emit("player:moved", data);
+  });
+
+  socket.on("chat:send", (data: { gameId: string; playerId: string; name: string; avatar: string; text: string }) => {
+    const text = (data.text ?? "").trim().slice(0, 200);
+    if (!text) return;
+    const msg: ChatMessage = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      playerId: data.playerId,
+      name: data.name,
+      avatar: data.avatar,
+      text,
+      ts: Date.now(),
+    };
+    const room = chatRooms.get(data.gameId) ?? [];
+    room.push(msg);
+    if (room.length > MAX_CHAT) room.splice(0, room.length - MAX_CHAT);
+    chatRooms.set(data.gameId, room);
+    io.to(`game:${data.gameId}`).emit("chat:message", msg);
+  });
+
+  // ── Voice chat signaling ──
+  socket.on("voice:join", ({ gameId, playerId }: { gameId: string; playerId: string }) => {
+    if (!voiceRooms.has(gameId)) voiceRooms.set(gameId, new Map());
+    const room = voiceRooms.get(gameId)!;
+    room.set(playerId, socket.id);
+    // Tell joiner who's already in voice
+    const existing = Array.from(room.entries())
+      .filter(([pid]) => pid !== playerId)
+      .map(([pid, sid]) => ({ playerId: pid, socketId: sid }));
+    socket.emit("voice:room-peers", existing);
+    // Tell existing peers about the new joiner
+    socket.to(`game:${gameId}`).emit("voice:peer-joined", { playerId, socketId: socket.id });
+  });
+
+  socket.on("voice:leave", ({ gameId, playerId }: { gameId: string; playerId: string }) => {
+    voiceRooms.get(gameId)?.delete(playerId);
+    socket.to(`game:${gameId}`).emit("voice:peer-left", { playerId });
+  });
+
+  // Route WebRTC signals directly to target socket
+  socket.on("voice:signal", ({ toSocketId, fromPlayerId, signal }: { toSocketId: string; fromPlayerId: string; signal: unknown }) => {
+    io.to(toSocketId).emit("voice:signal", { fromPlayerId, signal });
+  });
+
+  // Broadcast speaking status to room
+  socket.on("voice:speaking", ({ gameId, playerId, speaking }: { gameId: string; playerId: string; speaking: boolean }) => {
+    socket.to(`game:${gameId}`).emit("voice:speaking", { playerId, speaking });
+  });
+
+  // Clean up voice on disconnect
+  socket.on("disconnect", () => {
+    for (const [gameId, players] of voiceRooms.entries()) {
+      for (const [playerId, sid] of players.entries()) {
+        if (sid === socket.id) {
+          players.delete(playerId);
+          io.to(`game:${gameId}`).emit("voice:peer-left", { playerId });
+          break;
+        }
+      }
+    }
   });
 });
 
