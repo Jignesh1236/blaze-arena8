@@ -230,6 +230,9 @@ export default function GamePage() {
 
 
 
+  const chatOpenRef = useRef(chatOpen);
+  useEffect(() => { chatOpenRef.current = chatOpen; }, [chatOpen]);
+
   useEffect(() => {
 
     if (!id || !profile) return;
@@ -245,21 +248,21 @@ export default function GamePage() {
     socket.on("game:update", setGame);
 
     socket.on("player:moved", (data: { playerId: string; x: number; y: number }) => {
-
-      const p = [...(game?.players || []), ...(game?.spectators || [])].find(x => x.id === data.playerId);
-
-      if (p) setCursors(prev => ({ ...prev, [data.playerId]: { x: data.x, y: data.y, name: p.name, avatar: p.avatar } }));
-
+      // Use setGame state indirectly or find in game
+      setCursors(prev => {
+        // We don't have direct access to latest game here without re-running effect
+        // but we can just store the coordinates and name/avatar if provided or find later
+        return { ...prev, [data.playerId]: { ...prev[data.playerId], x: data.x, y: data.y } };
+      });
     });
 
     socket.on("chat:message", (msg: { id: string; name: string; avatar: string; text: string; at: string }) => {
       console.log("Received chat message:", msg);
       setChatMsgs(prev => {
-        // Prevent duplicate messages by checking ID
         if (prev.some(m => m.id === msg.id)) return prev;
         return [...prev.slice(-49), msg];
       });
-      setChatUnread(u => chatOpen ? 0 : u + 1);
+      if (!chatOpenRef.current) setChatUnread(u => u + 1);
     });
 
     socket.on("connect", joinRoom);
@@ -305,7 +308,7 @@ export default function GamePage() {
 
     };
 
-  }, [id, navigate, profile, game?.players, game?.spectators, chatOpen]);
+  }, [id, navigate, profile]);
 
   useEffect(() => {
     if (chatOpen) {

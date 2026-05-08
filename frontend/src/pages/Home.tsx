@@ -129,8 +129,13 @@ export default function HomePage() {
     if (!text) return;
     const p = profile || (name.trim() ? { id: "anon", name: name.trim(), avatar } : null);
     if (!p) { setError("Pick a name first to chat"); return; }
-    getSocket().emit("global:send", { name: p.name, avatar: p.avatar, text });
+    
+    const socket = getSocket();
+    if (!socket.connected) socket.connect();
+    
+    socket.emit("global:send", { name: p.name, avatar: p.avatar, text });
     setChatInput("");
+    setEmojiOpen(false);
   }
 
   function ensureProfile() {

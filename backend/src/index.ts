@@ -183,6 +183,15 @@ io.on("connection", (socket) => {
       at: new Date().toISOString()
     });
   });
+
+  // Global Chat (Lobby)
+  socket.on("global:send", (data: { name: string; avatar: string; text: string }) => {
+    io.to("lobby").emit("global:msg", {
+      id: Math.random().toString(36).slice(2, 9),
+      ...data,
+      at: new Date().toISOString()
+    });
+  });
 });
 
 
