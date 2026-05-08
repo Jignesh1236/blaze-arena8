@@ -117,32 +117,26 @@ export function useVoiceChat(gameId: string, myPlayerId: string) {
     try {
       patch({ error: null });
 
-      // Check if secure context (MediaDevices require HTTPS or localhost)
+      // 1. Check if we're in a secure context (MediaDevices require HTTPS or localhost)
       if (typeof window !== "undefined" && !window.isSecureContext) {
-        throw new Error("Voice chat requires a secure connection (HTTPS). Local development on localhost is also supported.");
+        throw new Error("Voice chat requires a secure connection (HTTPS). If you're testing locally, use localhost or 127.0.0.1.");
       }
 
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error("Your browser does not support mic access or it is blocked.");
-      }
-
-      // Check if permission was already denied
-      if (navigator.permissions) {
-        try {
-          const status = await navigator.permissions.query({ name: "microphone" as PermissionName });
-          if (status.state === "denied") {
-            throw new Error("Mic access is blocked in your browser settings. Please enable it to join voice chat.");
-          }
-        } catch (e) {
-          console.warn("Permissions API check failed, proceeding to getUserMedia", e);
-        }
+      // 2. Check for basic API support
+      const md = navigator.mediaDevices || (navigator as any).webkitGetUserMedia || (navigator as any).mozGetUserMedia || (navigator as any).msGetUserMedia;
+      if (!md) {
+        throw new Error("Your browser does not support microphone access.");
       }
 
       console.log("Requesting mic permission...");
       
-      // Try with modern constraints first, fallback to simple boolean if it fails
+      // 3. Try requesting permission directly. 
+      // We avoid navigator.permissions.query as it's inconsistent across browsers 
+      // and can break the user gesture chain in some cases.
+      
       let stream: MediaStream;
       try {
+        // Try with advanced constraints first
         stream = await navigator.mediaDevices.getUserMedia({
           audio: {
             echoCancellation: true,
@@ -151,17 +145,30 @@ export function useVoiceChat(gameId: string, myPlayerId: string) {
             ...(deviceId ? { deviceId: { exact: deviceId } } : {})
           },
         });
-      } catch (err) {
+      } catch (err: any) {
         console.warn("Advanced mic constraints failed, trying simple audio:true", err);
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        
+        // If the error is because the deviceId is no longer valid, try without it
+        if (err.name === "OverconstrainedError" || err.name === "NotFoundError") {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        } else {
+          // Re-throw if it's a permission or other serious error
+          throw err;
+        }
       }
 
       console.log("Mic granted successfully");
       localStream.current = stream;
       enabledRef.current = true;
 
-      const ctx = new AudioContext();
+      // 4. Initialize AudioContext for VAD (Voice Activity Detection)
+      // Some browsers require resume() on user gesture
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      if (ctx.state === "suspended") {
+        await ctx.resume();
+      }
       audioCtx.current = ctx;
+
       const src = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 256;
@@ -169,6 +176,7 @@ export function useVoiceChat(gameId: string, myPlayerId: string) {
       const buf = new Uint8Array(analyser.frequencyBinCount);
 
       const vad = () => {
+        if (!enabledRef.current) return;
         analyser.getByteFrequencyData(buf);
         const vol = buf.reduce((a, b) => a + b, 0) / buf.length;
         const speaking = vol > 10;
@@ -180,13 +188,24 @@ export function useVoiceChat(gameId: string, myPlayerId: string) {
       };
       vadFrame.current = requestAnimationFrame(vad);
 
+      // 5. Update device list
       const devices = await navigator.mediaDevices.enumerateDevices();
       const mics = devices.filter(d => d.kind === "audioinput");
       patch({ enabled: true, inputDevices: mics, selectedDeviceId: deviceId || mics[0]?.deviceId || "" });
 
       getSocket().emit("voice:join", { gameId, playerId: myPlayerId });
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Mic access denied";
+    } catch (e: any) {
+      console.error("Mic enable error:", e);
+      let msg = "Mic access denied";
+      if (e.name === "NotAllowedError" || e.name === "PermissionDeniedError") {
+        msg = "Permission denied. Please allow microphone access in your browser settings.";
+      } else if (e.name === "NotFoundError" || e.name === "DevicesNotFoundError") {
+        msg = "No microphone found. Please connect one and try again.";
+      } else if (e.name === "NotReadableError" || e.name === "TrackStartError") {
+        msg = "Microphone is already in use by another application.";
+      } else if (e.message) {
+        msg = e.message;
+      }
       patch({ error: msg });
     }
   }, [gameId, myPlayerId]);
