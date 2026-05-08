@@ -18,6 +18,8 @@ import { SuitPicker } from "@/components/SuitPicker";
 
 import { Seo } from "@/components/Seo";
 import { TableArrowIcon } from "@/components/Icons";
+import { useVoiceChat } from "@/hooks/useVoiceChat";
+import { VoicePanel } from "@/components/VoicePanel";
 
 
 
@@ -90,6 +92,8 @@ export default function GamePage() {
   const [switchOverlay, setSwitchOverlay] = useState<SwitchOverlay | null>(null);
 
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  const { state: voiceState, enable: enableVoice, disable: disableVoice, toggleMute, changeMic, setVolume } = useVoiceChat(id, profile?.id || "");
 
 
 
@@ -501,7 +505,12 @@ export default function GamePage() {
 
           <p className="text-xl opacity-90 mb-8 font-display">
 
-            {winner ? <span><span className="text-3xl mr-2">{winner.avatar}</span>{winner.name} swept the table!</span> : "The dust has settled."}
+            {winner ? (
+              <span className="flex items-center justify-center gap-2">
+                <img src={avatarUrl(winner.avatar)} alt={winner.name} className="w-10 h-10 rounded-full border-2 border-amber-400 object-cover" />
+                <span>{winner.name} swept the table!</span>
+              </span>
+            ) : "The dust has settled."}
 
           </p>
 
@@ -717,7 +726,7 @@ export default function GamePage() {
 
               <div className="flex flex-col items-center">
 
-                <span className="text-3xl">{switchOverlay.fromAvatar}</span>
+                <img src={avatarUrl(switchOverlay.fromAvatar)} alt={switchOverlay.fromName} className="w-10 h-10 rounded-full border-2 border-purple-400/50 object-cover" />
 
                 <span className="text-[10px] font-display text-purple-300 max-w-[56px] truncate mt-0.5">{switchOverlay.fromName}</span>
 
@@ -727,7 +736,7 @@ export default function GamePage() {
 
               <div className="flex flex-col items-center">
 
-                <span className="text-3xl">{switchOverlay.toAvatar}</span>
+                <img src={avatarUrl(switchOverlay.toAvatar)} alt={switchOverlay.toName} className="w-10 h-10 rounded-full border-2 border-purple-400/50 object-cover" />
 
                 <span className="text-[10px] font-display text-purple-300 max-w-[56px] truncate mt-0.5">{switchOverlay.toName}</span>
 
@@ -751,7 +760,7 @@ export default function GamePage() {
 
           <div key={pid} className="cursor-follower" style={{ left: `${pos.x}%`, top: `${pos.y}%` }}>
 
-            <span className="text-xl drop-shadow-md">{pos.avatar}</span>
+            <img src={avatarUrl(pos.avatar)} alt={pos.name} className="w-8 h-8 rounded-full border-2 border-amber-400/40 shadow-lg object-cover" />
 
           </div>
 
@@ -909,7 +918,13 @@ export default function GamePage() {
 
             <div key={p.id} className="absolute -translate-x-1/2 -translate-y-1/2 transition-all duration-700" style={positions[i]}>
 
-              <PlayerSeat player={p} cardCount={game.hands[p.id]?.length ?? 0} isCurrent={game.current_turn === p.id} isHost={game.host_id === p.id} />
+              <PlayerSeat
+                player={p}
+                cardCount={game.hands[p.id]?.length ?? 0}
+                isCurrent={game.current_turn === p.id}
+                isHost={game.host_id === p.id}
+                isSpeaking={voiceState.speaking[p.id]}
+              />
 
             </div>
 
@@ -1039,7 +1054,7 @@ export default function GamePage() {
 
             <div className="flex items-center justify-center gap-2 mb-1.5">
 
-              <span className="text-base leading-none">{profile?.avatar}</span>
+              <span className={`text-base leading-none rounded-full transition-all ${voiceState.speaking[youId || ""] ? "ring-2 ring-green-400 shadow-[0_0_8px_rgba(74,222,128,0.6)]" : ""}`}>{profile?.avatar}</span>
 
               <span className="text-[10px] font-display text-amber-200/70 truncate max-w-[80px]">{profile?.name}</span>
 
@@ -1143,9 +1158,9 @@ export default function GamePage() {
 
                   </div>
 
-                  <div className="text-[9px] font-display opacity-60 flex items-center gap-0.5">
+                  <div className="text-[9px] font-display opacity-60 flex items-center gap-1">
 
-                    <span>{p.avatar}</span>
+                    <img src={avatarUrl(p.avatar)} alt={p.name} className="w-4 h-4 rounded-full object-cover" />
 
                     <span className="truncate max-w-[48px]">{p.name}</span>
 
@@ -1175,10 +1190,20 @@ export default function GamePage() {
 
       {pendingCard && <SuitPicker onPick={pickSuit} onCancel={() => setPendingCard(null)} />}
 
+      <div className="fixed bottom-4 right-4 z-[100]">
+        <VoicePanel
+          state={voiceState}
+          players={game.players}
+          myPlayerId={youId || ""}
+          onEnable={() => enableVoice()}
+          onDisable={disableVoice}
+          onToggleMute={toggleMute}
+          onChangeMic={changeMic}
+          onSetVolume={setVolume}
+        />
+      </div>
     </main>
-
   );
-
 }
 
 
@@ -1253,7 +1278,7 @@ function Lobby({ game, youId, onLeave }: { game: GameRow; youId?: string; onLeav
 
                 <div key={p.id} className="flex items-center gap-2 bg-black/20 rounded-xl p-2.5 border border-white/5">
 
-                  <span className="text-xl">{p.avatar}</span>
+                  <img src={avatarUrl(p.avatar)} alt={p.name} className="w-8 h-8 rounded-full object-cover border border-amber-400/20" />
 
                   <div className="text-left min-w-0">
 

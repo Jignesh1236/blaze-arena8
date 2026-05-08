@@ -5,10 +5,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useGuest } from "@/lib/use-guest";
 
 import { Seo } from "@/components/Seo";
-
-
-
-const AVATARS = ["🤠", "🐴", "🌵", "🦂", "🪶", "⭐", "🌙", "🔥", "🎩", "🐺"];
+import { AVATAR_SEEDS, avatarUrl } from "@/lib/avatar";
 
 
 
@@ -22,7 +19,7 @@ export default function AuthPage() {
 
   const [name, setName] = useState("");
 
-  const [avatar, setAvatar] = useState("🤠");
+  const [avatar, setAvatar] = useState(AVATAR_SEEDS[0]);
 
 
 
@@ -80,13 +77,15 @@ export default function AuthPage() {
 
             <label className="block text-sm mb-1 font-display">Avatar</label>
 
-            <div className="grid grid-cols-5 gap-2">
+            <div className="grid grid-cols-6 gap-2">
 
-              {AVATARS.map((a) => (
+              {AVATAR_SEEDS.map((a) => (
 
                 <button key={a} type="button" onClick={() => setAvatar(a)}
 
-                  className={`text-2xl aspect-square rounded-lg border-2 ${avatar === a ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10" : "border-border"}`}>{a}</button>
+                  className={`aspect-square rounded-lg border-2 overflow-hidden transition-all ${avatar === a ? "border-[var(--color-accent)] scale-105" : "border-border hover:border-amber-400/40"}`}>
+                  <img src={avatarUrl(a)} alt={a} className="w-full h-full object-cover" />
+                </button>
 
               ))}
 

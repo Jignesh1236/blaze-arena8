@@ -44,6 +44,8 @@ export default function HomePage() {
   const [avatar, setAvatar] = useState(AVATAR_SEEDS[0]);
   const [avatarConfig, setAvatarConfig] = useState<AvatarConfig>(DEFAULT_CONFIG);
   const [customizerOpen, setCustomizerOpen] = useState(false);
+  const [adWatched, setAdWatched] = useState(false);
+  const [adLoading, setAdLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [games, setGames] = useState<PublicGame[]>([]);
@@ -134,8 +136,38 @@ export default function HomePage() {
   const activeGames = games.filter((g) => g.status === "lobby" || g.status === "playing");
   const previewUrl = avatarUrl(configToSeed(avatarConfig));
 
+  function handleCustomizeClick() {
+    if (adWatched) {
+      setCustomizerOpen(true);
+    } else {
+      setAdLoading(true);
+      // Simulate ad loading and playing
+      setTimeout(() => {
+        setAdLoading(false);
+        setAdWatched(true);
+        setCustomizerOpen(true);
+      }, 5000); // 5 second "ad"
+    }
+  }
+
   return (
     <main className="min-h-screen relative overflow-hidden bg-table">
+      {adLoading && (
+        <div className="fixed inset-0 z-[1000] bg-black/90 flex flex-col items-center justify-center p-6 text-center">
+          <div className="w-20 h-20 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mb-6" />
+          <h2 className="font-display text-2xl text-amber-200 mb-2">Watching Sponsor Video...</h2>
+          <p className="text-amber-200/60 max-w-xs mx-auto">Customization will be unlocked in a few seconds. Support us to keep the saloon open! 🤠</p>
+          <div className="mt-8 w-64 h-2 bg-white/10 rounded-full overflow-hidden">
+            <div className="h-full bg-amber-500 animate-[progress_5s_linear_forwards]" />
+          </div>
+          <style>{`
+            @keyframes progress {
+              from { width: 0%; }
+              to { width: 100%; }
+            }
+          `}</style>
+        </div>
+      )}
       <Seo
         title="Blazing 8s — Free Real-time Multiplayer Crazy Eights Card Game"
         description="Play Crazy Eights online free with a Wild West twist. No login needed — pick a handle, create a room, share the code and deal the cards. Up to 6 players."
@@ -150,10 +182,10 @@ export default function HomePage() {
           </div>
           {profile && (
             <div className="flex items-center gap-3">
-              <img src={avatarUrl(profile.avatar)} alt="avatar" className="w-8 h-8 rounded-full object-cover border border-amber-400/40" />
-              <span className="font-display">{profile.name}</span>
-              <Link to="/auth" className="text-sm underline">Edit</Link>
-              <button onClick={clear} className="text-sm">Reset</button>
+              <img src={avatarUrl(profile.avatar)} alt="avatar" className="w-8 h-8 rounded-full object-cover border-2 border-amber-400/40 shadow-sm" />
+              <span className="font-display text-amber-100">{profile.name}</span>
+              <Link to="/auth" className="text-xs bg-white/10 px-2 py-1 rounded-lg border border-white/10 hover:bg-white/20 transition-all">Edit</Link>
+              <button onClick={clear} className="text-xs opacity-50 hover:opacity-100">Reset</button>
             </div>
           )}
         </header>
@@ -190,10 +222,10 @@ export default function HomePage() {
                   <label className="block text-sm font-display">Choose your look</label>
                   <button
                     type="button"
-                    onClick={() => setCustomizerOpen(o => !o)}
+                    onClick={handleCustomizeClick}
                     className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg bg-amber-500/20 border border-amber-400/30 text-amber-300 hover:bg-amber-500/30 transition-colors font-display"
                   >
-                    ✦ Customize
+                    {adWatched ? "✦ Customize" : "📺 Watch Ad to Customize"}
                   </button>
                 </div>
 
@@ -302,28 +334,40 @@ export default function HomePage() {
         {chatOpen && (
           <div className="w-80 sm:w-96 flex flex-col rounded-2xl border border-amber-200/15 shadow-2xl"
                style={{ background: "rgba(10,6,4,0.94)", backdropFilter: "blur(16px)", maxHeight: "520px" }}>
-            <div className="flex items-center justify-between px-3 py-2 border-b border-amber-200/10 flex-shrink-0 rounded-t-2xl">
-              <div className="flex items-center gap-1.5">
-                <GlobeIcon size={15} color="#fbbf24" />
-                <span className="font-display text-xs text-amber-200/80 tracking-wide">GLOBAL CHAT</span>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-amber-200/10 flex-shrink-0 rounded-t-2xl bg-amber-500/5">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                <span className="font-display text-xs text-amber-200 tracking-[0.15em] uppercase">Saloon Chat</span>
               </div>
-              <button onClick={() => setChatOpen(false)} className="text-amber-200/40 hover:text-amber-200/80 text-xl leading-none">×</button>
+              <button onClick={() => setChatOpen(false)} className="text-amber-200/40 hover:text-amber-200/80 text-2xl leading-none transition-colors">×</button>
             </div>
-            <div className="flex-1 overflow-y-auto px-2 py-2 space-y-1.5" style={{ minHeight: "180px", maxHeight: "380px" }}>
+            <div className="flex-1 overflow-y-auto px-3 py-4 space-y-4 no-scrollbar" style={{ minHeight: "200px", maxHeight: "400px" }}>
               {chatMsgs.length === 0 && (
-                <div className="text-center text-[10px] font-display text-amber-200/25 mt-6 tracking-widest">No messages yet…</div>
+                <div className="h-full flex flex-col items-center justify-center text-center px-6">
+                  <div className="w-12 h-12 rounded-full bg-amber-500/10 flex items-center justify-center mb-3">
+                    <ChatIcon size={24} color="#fbbf2444" />
+                  </div>
+                  <p className="text-[11px] font-display text-amber-200/30 tracking-widest uppercase">No messages yet in the saloon</p>
+                </div>
               )}
-              {chatMsgs.map(msg => (
-                <div key={msg.id} className="flex gap-1.5 items-start">
-                  <img src={avatarUrl(msg.avatar)} alt="avatar" className="w-6 h-6 rounded-full object-cover flex-shrink-0 mt-0.5" />
-                  <div className="flex flex-col items-start max-w-[80%]">
-                    <span className="text-[9px] font-display opacity-40 mb-0.5 px-1">{msg.name}</span>
-                    <div className="px-2.5 py-1.5 rounded-2xl rounded-tl-sm text-xs leading-snug bg-white/8 text-amber-100/90 border border-white/5 break-words">
-                      {renderWithEmotes(msg.text)}
+              {chatMsgs.map((msg, i) => {
+                const isMe = profile?.name === msg.name;
+                return (
+                  <div key={msg.id} className={`flex gap-2.5 items-start ${isMe ? "flex-row-reverse" : "flex-row"}`}>
+                    <img src={avatarUrl(msg.avatar)} alt="avatar" className="w-8 h-8 rounded-full object-cover flex-shrink-0 border border-white/10 shadow-sm" />
+                    <div className={`flex flex-col ${isMe ? "items-end" : "items-start"} max-w-[80%]`}>
+                      {!isMe && <span className="text-[10px] font-display text-amber-200/50 mb-1 px-1">{msg.name}</span>}
+                      <div className={`px-3 py-2 rounded-2xl text-xs leading-relaxed shadow-sm border ${
+                        isMe 
+                          ? "bg-amber-500/20 text-amber-50 border-amber-500/20 rounded-tr-none" 
+                          : "bg-white/5 text-amber-100/90 border-white/5 rounded-tl-none"
+                      } break-words`}>
+                        {renderWithEmotes(msg.text)}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               <div ref={chatEndRef} />
             </div>
             <div className="relative">
@@ -334,19 +378,19 @@ export default function HomePage() {
                 />
               )}
             </div>
-            <form className="flex items-center gap-1.5 px-2 py-2 border-t border-amber-200/10 flex-shrink-0 rounded-b-2xl"
+            <form className="flex items-center gap-2 px-3 py-3 border-t border-amber-200/10 flex-shrink-0 rounded-b-2xl bg-black/20"
                   onSubmit={e => { e.preventDefault(); sendGlobalChat(); }}>
               <button type="button" onClick={() => setEmojiOpen(o => !o)}
-                className="w-7 h-7 rounded-lg flex items-center justify-center text-amber-200/40 hover:text-amber-200/70 hover:bg-white/5 transition-colors flex-shrink-0"
+                className="w-9 h-9 rounded-xl flex items-center justify-center text-amber-200/40 hover:text-amber-200/70 hover:bg-white/5 transition-all flex-shrink-0 border border-transparent hover:border-amber-200/10"
                 title="7TV Emotes">
-                <EmojiIcon size={16} color="#fbbf24" />
+                <EmojiIcon size={20} color="#fbbf24" />
               </button>
               <input value={chatInput} onChange={e => setChatInput(e.target.value)} maxLength={200}
-                placeholder="Say something…"
-                className="flex-1 bg-white/6 border border-amber-200/10 rounded-xl px-3 py-1.5 text-xs text-amber-100 placeholder-amber-200/25 outline-none focus:border-amber-400/30 font-sans" />
+                placeholder="Message the saloon…"
+                className="flex-1 bg-white/5 border border-amber-200/10 rounded-xl px-4 py-2 text-xs text-amber-50 placeholder-amber-200/20 outline-none focus:border-amber-500/40 focus:bg-white/8 transition-all font-sans" />
               <button type="submit" disabled={!chatInput.trim()}
-                className="w-8 h-8 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-30 flex items-center justify-center flex-shrink-0">
-                <SendIcon size={16} color="#fff" />
+                className="w-9 h-9 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-30 flex items-center justify-center flex-shrink-0 shadow-lg shadow-amber-500/20 transition-all active:scale-95">
+                <SendIcon size={18} color="#fff" />
               </button>
             </form>
           </div>

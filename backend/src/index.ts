@@ -153,11 +153,27 @@ io.on("connection", (socket) => {
 
 
   socket.on("player:move", (data: { gameId: string; playerId: string; x: number; y: number }) => {
-
     socket.to(`game:${data.gameId}`).emit("player:moved", data);
-
   });
 
+  // Voice Chat Events
+  socket.on("voice:join", ({ gameId, playerId }) => {
+    socket.join(`voice:${gameId}`);
+    socket.to(`game:${gameId}`).emit("voice:peer-joined", { playerId, socketId: socket.id });
+  });
+
+  socket.on("voice:leave", ({ gameId, playerId }) => {
+    socket.leave(`voice:${gameId}`);
+    socket.to(`game:${gameId}`).emit("voice:peer-left", { playerId });
+  });
+
+  socket.on("voice:signal", ({ toSocketId, fromPlayerId, signal }) => {
+    io.to(toSocketId).emit("voice:signal", { fromPlayerId, fromSocketId: socket.id, signal });
+  });
+
+  socket.on("voice:speaking", ({ gameId, playerId, speaking }) => {
+    socket.to(`game:${gameId}`).emit("voice:speaking", { playerId, speaking });
+  });
 });
 
 
