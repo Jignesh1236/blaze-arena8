@@ -197,29 +197,29 @@ gameEmitter.on("game:update", (g: GameRow) => {
 
 
 
-// Inactivity check every 5 seconds
+// Inactivity check every 10 seconds
+  setInterval(async () => {
+    const allGames = store.getAll();
+    const now = Date.now();
+    const THIRTY_MINS = 30 * 60 * 1000;
 
-setInterval(async () => {
-
-  const allGames = store.getAll();
-
-  const now = new Date().getTime();
-
-  for (const g of allGames) {
-
-    if (g.status === "playing" && g.last_turn_at) {
-
-      const lastTurn = new Date(g.last_turn_at).getTime();
-
-      if (now - lastTurn > 60000) {
-
-        await forceSkipTurn(g.id);
-
+    for (const g of allGames) {
+      // 1. Delete room if inactive for 30 minutes
+      const lastUpdate = new Date(g.updated_at).getTime();
+      if (now - lastUpdate > THIRTY_MINS) {
+        console.log(`[cleanup] deleting room ${g.id} due to 30m inactivity`);
+        store.delete(g.id);
+        continue;
       }
 
+      // 2. Force skip turn if playing and inactive for 60 seconds
+      if (g.status === "playing" && g.last_turn_at) {
+        const lastTurn = new Date(g.last_turn_at).getTime();
+        if (now - lastTurn > 60000) {
+          await forceSkipTurn(g.id);
+        }
+      }
     }
-
-  }
-
-}, 5000);
+  }, 10000);
+});
 

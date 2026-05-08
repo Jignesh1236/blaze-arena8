@@ -22,6 +22,7 @@ export function VoicePanel({ state, players, myPlayerId, onEnable, onDisable, on
   const playerMap = Object.fromEntries(players.map(p => [p.id, p]));
 
   const isDenied = state.error?.includes("Permission") || state.error?.includes("denied") || state.error?.includes("NotAllowed");
+  const isSecurityBlock = state.error?.includes("SECURITY_BLOCK");
 
   return (
     <div className="flex flex-col items-end gap-2">
@@ -90,6 +91,12 @@ export function VoicePanel({ state, players, myPlayerId, onEnable, onDisable, on
                   >
                     Show me how →
                   </button>
+                </div>
+              ) : isSecurityBlock ? (
+                <div className="flex flex-col gap-1.5">
+                  <p className="text-amber-300 font-bold underline">SECURITY ERROR:</p>
+                  <p>{state.error.replace("SECURITY_BLOCK: ", "")}</p>
+                  <p className="text-white/60">Browsers safety ke liye mic sirf HTTPS par allow karte hain.</p>
                 </div>
               ) : (
                 `Error: ${state.error}`

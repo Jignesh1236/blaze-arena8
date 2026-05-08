@@ -215,8 +215,13 @@ export default function GamePage() {
     });
 
     socket.on("chat:message", (msg: { id: string; name: string; avatar: string; text: string; at: string }) => {
-      setChatMsgs(prev => [...prev.slice(-49), msg]);
-      if (!chatOpen) setChatUnread(u => u + 1);
+      console.log("Received chat message:", msg);
+      setChatMsgs(prev => {
+        // Prevent duplicate messages by checking ID
+        if (prev.some(m => m.id === msg.id)) return prev;
+        return [...prev.slice(-49), msg];
+      });
+      setChatUnread(u => chatOpen ? 0 : u + 1);
     });
 
     socket.on("connect", joinRoom);
@@ -273,7 +278,12 @@ export default function GamePage() {
 
   function sendChat() {
     if (!chatInput.trim() || !id || !profile) return;
-    getSocket().emit("chat:send", {
+    const socket = getSocket();
+    if (!socket.connected) {
+      console.error("Socket not connected, trying to reconnect...");
+      socket.connect();
+    }
+    socket.emit("chat:send", {
       gameId: id,
       name: profile.name,
       avatar: profile.avatar,

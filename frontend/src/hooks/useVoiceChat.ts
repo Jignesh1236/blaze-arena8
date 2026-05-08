@@ -118,26 +118,33 @@ export function useVoiceChat(gameId: string, myPlayerId: string) {
       patch({ error: null });
 
       // 1. Check if we're in a secure context (MediaDevices require HTTPS or localhost)
-      if (typeof window !== "undefined" && !window.isSecureContext) {
-        throw new Error("Voice chat requires a secure connection (HTTPS). If you're testing locally, use localhost or 127.0.0.1.");
+      const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+      if (typeof window !== "undefined" && !window.isSecureContext && !isLocalhost) {
+        throw new Error("SECURITY_BLOCK: Browser mic access block kar raha hai kyunki connection HTTPS nahi hai. Agar aap mobile ya dusre device par test kar rahe hain, toh aapko HTTPS use karna hoga ya 'localhost' par chalana hoga.");
       }
 
       // 2. Check for basic API support
-      const md = navigator.mediaDevices || (navigator as any).webkitGetUserMedia || (navigator as any).mozGetUserMedia || (navigator as any).msGetUserMedia;
-      if (!md) {
-        throw new Error("Your browser does not support microphone access.");
+      if (!navigator.mediaDevices && !(navigator as any).getUserMedia && !(navigator as any).webkitGetUserMedia) {
+        throw new Error("API_NOT_SUPPORTED: Aapka browser microphone access support nahi karta. Kripya Chrome, Firefox ya Safari ka latest version use karein.");
       }
 
       console.log("Requesting mic permission...");
       
       // 3. Try requesting permission directly. 
-      // We avoid navigator.permissions.query as it's inconsistent across browsers 
-      // and can break the user gesture chain in some cases.
-      
       let stream: MediaStream;
       try {
-        // Try with advanced constraints first
-        stream = await navigator.mediaDevices.getUserMedia({
+        console.log("Attempting getUserMedia...");
+        
+        // Legacy fallback for very old browsers
+        const getUserMedia = navigator.mediaDevices?.getUserMedia?.bind(navigator.mediaDevices) || 
+                           (navigator as any).webkitGetUserMedia?.bind(navigator) || 
+                           (navigator as any).mozGetUserMedia?.bind(navigator);
+
+        if (!getUserMedia) {
+          throw new Error("GET_USER_MEDIA_MISSING");
+        }
+
+        stream = await getUserMedia({
           audio: {
             echoCancellation: true,
             noiseSuppression: true,
@@ -146,13 +153,19 @@ export function useVoiceChat(gameId: string, myPlayerId: string) {
           },
         });
       } catch (err: any) {
-        console.warn("Advanced mic constraints failed, trying simple audio:true", err);
+        console.error("Mic Error Details:", err);
         
-        // If the error is because the deviceId is no longer valid, try without it
-        if (err.name === "OverconstrainedError" || err.name === "NotFoundError") {
-          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // Fallback to simplest possible audio request
+        if (err.name === "OverconstrainedError" || err.name === "NotFoundError" || err.message === "GET_USER_MEDIA_MISSING") {
+          const getUserMedia = navigator.mediaDevices?.getUserMedia?.bind(navigator.mediaDevices) || 
+                             (navigator as any).webkitGetUserMedia?.bind(navigator);
+          
+          if (getUserMedia) {
+            stream = await getUserMedia({ audio: true });
+          } else {
+            throw new Error("Aapke browser mein mic access ka option hi nahi mil raha.");
+          }
         } else {
-          // Re-throw if it's a permission or other serious error
           throw err;
         }
       }
