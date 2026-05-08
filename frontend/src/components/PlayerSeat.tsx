@@ -1,5 +1,6 @@
 import type { Player } from "@/lib/game";
 import { PlayingCard } from "./PlayingCard";
+import { avatarUrl } from "@/lib/avatar";
 
 export function PlayerSeat({ player, cardCount, isCurrent, isHost, isSpeaking }: {
   player: Player; cardCount: number; isCurrent?: boolean; isHost?: boolean; isSpeaking?: boolean;
@@ -22,13 +23,12 @@ export function PlayerSeat({ player, cardCount, isCurrent, isHost, isSpeaking }:
           ))}
         </div>
 
-        {/* Avatar circle — thick warm border matching the table ring */}
+        {/* Avatar circle */}
         <div
-          className="relative w-14 h-14 sm:w-18 sm:h-18 rounded-full flex items-center justify-center text-3xl sm:text-4xl shadow-2xl transition-all duration-300"
+          className="relative rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 overflow-hidden"
           style={{
             width: "clamp(52px, 6vw, 72px)",
             height: "clamp(52px, 6vw, 72px)",
-            fontSize: "clamp(22px, 3vw, 32px)",
             background: isCurrent
               ? "radial-gradient(circle at 38% 32%, rgba(255,210,80,0.22) 0%, rgba(30,14,4,0.95) 100%)"
               : "radial-gradient(circle at 38% 32%, rgba(80,40,10,0.9) 0%, rgba(20,8,2,0.97) 100%)",
@@ -41,7 +41,12 @@ export function PlayerSeat({ player, cardCount, isCurrent, isHost, isSpeaking }:
             transition: "all 0.4s",
           }}
         >
-          <span className="drop-shadow-sm select-none">{player.avatar}</span>
+          <img
+            src={avatarUrl(player.avatar)}
+            alt={player.name}
+            className="w-full h-full object-cover"
+            loading="lazy"
+          />
 
           {/* Speaking ring */}
           {isSpeaking && (
@@ -56,8 +61,8 @@ export function PlayerSeat({ player, cardCount, isCurrent, isHost, isSpeaking }:
           )}
 
           {isHost && (
-            <div className="absolute -top-3 -left-1 bg-amber-100 rounded-full p-0.5 shadow-md border border-amber-300">
-              <span className="text-xs">👑</span>
+            <div className="absolute -top-2 -left-1 bg-amber-100 rounded-full p-0.5 shadow-md border border-amber-300" style={{ fontSize: "10px" }}>
+              👑
             </div>
           )}
 

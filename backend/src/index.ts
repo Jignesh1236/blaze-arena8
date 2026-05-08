@@ -92,6 +92,13 @@ io.on("connection", (socket) => {
     socket.leave("lobby");
   });
 
+  // Global chat (lobby room, not persisted)
+  socket.on("global:send", ({ name, avatar, text }: { name: string; avatar: string; text: string }) => {
+    const msg = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, name, avatar, text: text.trim().slice(0, 200) };
+    if (!msg.text) return;
+    io.to("lobby").emit("global:msg", msg);
+  });
+
   socket.on("player:move", (data: { gameId: string; playerId: string; x: number; y: number }) => {
     socket.to(`game:${data.gameId}`).emit("player:moved", data);
   });
@@ -133,9 +140,9 @@ io.on("connection", (socket) => {
     socket.to(`game:${gameId}`).emit("voice:peer-left", { playerId });
   });
 
-  // Route WebRTC signals directly to target socket
+  // Route WebRTC signals directly to target socket (include fromSocketId to fix race condition)
   socket.on("voice:signal", ({ toSocketId, fromPlayerId, signal }: { toSocketId: string; fromPlayerId: string; signal: unknown }) => {
-    io.to(toSocketId).emit("voice:signal", { fromPlayerId, signal });
+    io.to(toSocketId).emit("voice:signal", { fromPlayerId, fromSocketId: socket.id, signal });
   });
 
   // Broadcast speaking status to room

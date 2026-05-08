@@ -37,7 +37,7 @@ export function useGuest() {
     const player: Player = {
       id: existing?.id ?? uuid(),
       name: name.trim().slice(0, 24) || "Cowpoke",
-      avatar: avatar || "🤠",
+      avatar: avatar || "Felix",
     };
     localStorage.setItem(KEY, JSON.stringify(player));
     setProfile(player);

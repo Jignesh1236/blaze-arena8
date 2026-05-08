@@ -10,6 +10,7 @@ import { SuitPicker } from "@/components/SuitPicker";
 import { Seo } from "@/components/Seo";
 import { VoicePanel } from "@/components/VoicePanel";
 import { useVoiceChat } from "@/hooks/useVoiceChat";
+import { avatarUrl } from "@/lib/avatar";
 
 interface ChatMsg {
   id: string;
@@ -351,7 +352,7 @@ export default function GamePage() {
           <div className="text-8xl mb-6">{youWon ? "🏆" : "🏜️"}</div>
           <h1 className="font-display text-5xl sm:text-6xl mb-4 bg-gradient-to-b from-amber-200 to-amber-500 bg-clip-text text-transparent">{youWon ? "VICTORY!" : "DEFEAT"}</h1>
           <p className="text-xl opacity-90 mb-8 font-display">
-            {winner ? <span><span className="text-3xl mr-2">{winner.avatar}</span>{winner.name} swept the table!</span> : "The dust has settled."}
+            {winner ? <span className="flex items-center justify-center gap-2"><img src={avatarUrl(winner.avatar)} alt="winner" className="w-10 h-10 rounded-full object-cover border-2 border-amber-400/50" />{winner.name} swept the table!</span> : "The dust has settled."}
           </p>
           <div className="space-y-3">
             {(isPlayer || isSpectator) && (
@@ -459,12 +460,12 @@ export default function GamePage() {
             <div className="font-display text-xl sm:text-2xl text-purple-200 tracking-wider mb-2">🔄 SWITCHEROO!</div>
             <div className="flex items-center justify-center gap-3">
               <div className="flex flex-col items-center">
-                <span className="text-3xl">{switchOverlay.fromAvatar}</span>
+                <img src={avatarUrl(switchOverlay.fromAvatar)} alt="from" className="w-10 h-10 rounded-full object-cover border-2 border-purple-400/50" />
                 <span className="text-[10px] font-display text-purple-300 max-w-[56px] truncate mt-0.5">{switchOverlay.fromName}</span>
               </div>
               <span className="text-purple-300 text-2xl font-bold">⇄</span>
               <div className="flex flex-col items-center">
-                <span className="text-3xl">{switchOverlay.toAvatar}</span>
+                <img src={avatarUrl(switchOverlay.toAvatar)} alt="to" className="w-10 h-10 rounded-full object-cover border-2 border-purple-400/50" />
                 <span className="text-[10px] font-display text-purple-300 max-w-[56px] truncate mt-0.5">{switchOverlay.toName}</span>
               </div>
             </div>
@@ -476,7 +477,7 @@ export default function GamePage() {
       {Object.entries(cursors).map(([pid, pos]) => (
         pid !== youId && (
           <div key={pid} className="cursor-follower" style={{ left: `${pos.x}%`, top: `${pos.y}%` }}>
-            <span className="text-xl drop-shadow-md">{pos.avatar}</span>
+            <img src={avatarUrl(pos.avatar)} alt="cursor" className="w-7 h-7 rounded-full object-cover drop-shadow-md border border-amber-400/30" />
           </div>
         )
       ))}
@@ -647,7 +648,7 @@ export default function GamePage() {
           <div className="flex-shrink-0 bg-gradient-to-t from-black/50 via-black/20 to-transparent pt-2 pb-3 px-2">
             {/* Player info strip */}
             <div className="flex items-center justify-center gap-2 mb-1.5">
-              <span className="text-base leading-none">{profile?.avatar}</span>
+              <img src={avatarUrl(profile?.avatar ?? "Felix")} alt="me" className="w-6 h-6 rounded-full object-cover border border-amber-400/30" />
               <span className="text-[10px] font-display text-amber-200/70 truncate max-w-[80px]">{profile?.name}</span>
               <span className="text-[10px] bg-amber-900/40 px-1.5 py-0.5 rounded-full font-display text-amber-200/60">{yourHand.length} cards</span>
               {isYourTurn && <span className="text-[10px] bg-accent/20 border border-accent/40 px-1.5 py-0.5 rounded-full font-display text-accent animate-pulse">YOUR TURN</span>}
@@ -700,7 +701,7 @@ export default function GamePage() {
                     )}
                   </div>
                   <div className="text-[9px] font-display opacity-60 flex items-center gap-0.5">
-                    <span>{p.avatar}</span>
+                    <img src={avatarUrl(p.avatar)} alt={p.name} className="w-4 h-4 rounded-full object-cover" />
                     <span className="truncate max-w-[48px]">{p.name}</span>
                   </div>
                 </div>
@@ -751,7 +752,7 @@ export default function GamePage() {
               )}
               {chatMsgs.map(msg => (
                 <div key={msg.id} className={cn("flex gap-1.5 items-start", msg.playerId === youId ? "flex-row-reverse" : "flex-row")}>
-                  <span className="text-base flex-shrink-0 mt-0.5">{msg.avatar}</span>
+                  <img src={avatarUrl(msg.avatar)} alt="avatar" className="w-6 h-6 rounded-full object-cover flex-shrink-0 mt-0.5 border border-amber-400/20" />
                   <div className={cn("max-w-[75%] flex flex-col", msg.playerId === youId ? "items-end" : "items-start")}>
                     <span className="text-[9px] font-display opacity-40 mb-0.5 px-1">{msg.playerId === youId ? "You" : msg.name}</span>
                     <div className={cn(
@@ -807,11 +808,53 @@ export default function GamePage() {
   );
 }
 
+interface LobbyMsg { id: string; playerId: string; name: string; avatar: string; text: string; }
+
 function Lobby({ game, youId, onLeave }: { game: GameRow; youId?: string; onLeave: () => void }) {
+  const { profile } = useGuest();
   const isHost = game.host_id === youId;
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
+
+  const { state: voiceState, enable: voiceEnable, disable: voiceDisable, toggleMute: voiceToggleMute, changeMic: voiceChangeMic, setVolume: voiceSetVolume } =
+    useVoiceChat(game.id, youId ?? "");
+
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatInput, setChatInput] = useState("");
+  const [chatMsgs, setChatMsgs] = useState<LobbyMsg[]>([]);
+  const [chatUnread, setChatUnread] = useState(0);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatOpenRef = useRef(chatOpen);
+  useEffect(() => { chatOpenRef.current = chatOpen; }, [chatOpen]);
+
+  useEffect(() => {
+    const socket = getSocket();
+    function onChatMsg(msg: LobbyMsg) {
+      setChatMsgs(prev => [...prev, msg]);
+      if (!chatOpenRef.current) setChatUnread(n => n + 1);
+    }
+    function onHistory(msgs: LobbyMsg[]) { setChatMsgs(msgs); }
+    socket.on("chat:message", onChatMsg);
+    socket.on("chat:history", onHistory);
+    return () => {
+      socket.off("chat:message", onChatMsg);
+      socket.off("chat:history", onHistory);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (chatOpen) {
+      setChatUnread(0);
+      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+    }
+  }, [chatOpen, chatMsgs]);
+
+  function sendChat() {
+    if (!chatInput.trim() || !profile) return;
+    getSocket().emit("chat:send", { gameId: game.id, playerId: profile.id, name: profile.name, avatar: profile.avatar, text: chatInput.trim() });
+    setChatInput("");
+  }
 
   async function copy() {
     await navigator.clipboard.writeText(game.code);
@@ -842,7 +885,7 @@ function Lobby({ game, youId, onLeave }: { game: GameRow; youId?: string; onLeav
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {game.players.map(p => (
                 <div key={p.id} className="flex items-center gap-2 bg-black/20 rounded-xl p-2.5 border border-white/5">
-                  <span className="text-xl">{p.avatar}</span>
+                  <img src={avatarUrl(p.avatar)} alt={p.name} className="w-9 h-9 rounded-full object-cover flex-shrink-0 border border-amber-400/20" />
                   <div className="text-left min-w-0">
                     <div className="font-display text-xs truncate">{p.name}</div>
                     {p.id === game.host_id && <div className="text-[9px] opacity-50">👑 Host</div>}
@@ -861,6 +904,72 @@ function Lobby({ game, youId, onLeave }: { game: GameRow; youId?: string; onLeav
             <p className="mt-5 opacity-50 font-display text-sm">Waitin' for the host…</p>
           )}
         </div>
+      </div>
+
+      {/* Voice panel */}
+      <div className="fixed bottom-4 right-[4.5rem] z-[250]">
+        <VoicePanel
+          state={voiceState}
+          players={game.players}
+          myPlayerId={youId ?? ""}
+          onEnable={voiceEnable}
+          onDisable={voiceDisable}
+          onToggleMute={voiceToggleMute}
+          onChangeMic={voiceChangeMic}
+          onSetVolume={voiceSetVolume}
+        />
+      </div>
+
+      {/* Chat panel */}
+      <div className="fixed bottom-4 right-3 z-[250] flex flex-col items-end gap-2">
+        {chatOpen && (
+          <div className="w-72 sm:w-80 flex flex-col rounded-2xl overflow-hidden border border-amber-200/15 shadow-2xl"
+               style={{ background: "rgba(10,6,4,0.94)", backdropFilter: "blur(16px)", maxHeight: "340px" }}>
+            <div className="flex items-center justify-between px-3 py-2 border-b border-amber-200/10 flex-shrink-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-base">💬</span>
+                <span className="font-display text-xs text-amber-200/80 tracking-wide">LOBBY CHAT</span>
+              </div>
+              <button onClick={() => setChatOpen(false)} className="text-amber-200/40 hover:text-amber-200/80 text-lg leading-none">×</button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-2 py-2 space-y-1.5" style={{ minHeight: "160px", maxHeight: "240px" }}>
+              {chatMsgs.length === 0 && (
+                <div className="text-center text-[10px] font-display text-amber-200/25 mt-6 tracking-widest">No messages yet…</div>
+              )}
+              {chatMsgs.map(msg => (
+                <div key={msg.id} className={cn("flex gap-1.5 items-start", msg.playerId === youId ? "flex-row-reverse" : "flex-row")}>
+                  <img src={avatarUrl(msg.avatar)} alt="avatar" className="w-6 h-6 rounded-full object-cover flex-shrink-0 mt-0.5 border border-amber-400/20" />
+                  <div className={cn("max-w-[75%] flex flex-col", msg.playerId === youId ? "items-end" : "items-start")}>
+                    <span className="text-[9px] font-display opacity-40 mb-0.5 px-1">{msg.playerId === youId ? "You" : msg.name}</span>
+                    <div className={cn("px-2.5 py-1.5 rounded-2xl text-xs leading-snug break-words",
+                      msg.playerId === youId ? "bg-amber-500/80 text-white rounded-tr-sm" : "bg-white/8 text-amber-100/90 rounded-tl-sm border border-white/5")}>
+                      {msg.text}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <div ref={chatEndRef} />
+            </div>
+            <form className="flex items-center gap-1.5 px-2 py-2 border-t border-amber-200/10 flex-shrink-0"
+                  onSubmit={e => { e.preventDefault(); sendChat(); }}>
+              <input value={chatInput} onChange={e => setChatInput(e.target.value)} maxLength={200}
+                placeholder="Type a message…"
+                className="flex-1 bg-white/6 border border-amber-200/10 rounded-xl px-3 py-1.5 text-xs text-amber-100 placeholder-amber-200/25 outline-none focus:border-amber-400/30 font-sans" />
+              <button type="submit" disabled={!chatInput.trim()}
+                className="w-8 h-8 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-30 flex items-center justify-center text-sm flex-shrink-0">▶</button>
+            </form>
+          </div>
+        )}
+        <button onClick={() => setChatOpen(o => !o)}
+          className="relative w-12 h-12 rounded-full flex items-center justify-center border border-amber-200/20 shadow-xl transition-all hover:scale-105 active:scale-95"
+          style={{ background: chatOpen ? "rgba(251,191,36,0.18)" : "rgba(10,6,4,0.82)", backdropFilter: "blur(12px)" }}>
+          <span className="text-xl">{chatOpen ? "✕" : "💬"}</span>
+          {!chatOpen && chatUnread > 0 && (
+            <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-amber-500 border-2 border-black flex items-center justify-center text-[9px] font-bold text-white">
+              {chatUnread > 9 ? "9+" : chatUnread}
+            </div>
+          )}
+        </button>
       </div>
     </main>
   );

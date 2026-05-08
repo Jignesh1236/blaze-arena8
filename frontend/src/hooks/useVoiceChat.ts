@@ -52,7 +52,7 @@ export function useVoiceChat(gameId: string, myPlayerId: string) {
   const closePeer = useCallback((playerId: string) => {
     const conn = peerConns.current.get(playerId);
     if (!conn) return;
-    conn.pc.close();
+    try { conn.pc.close(); } catch { /* ignore */ }
     conn.audioEl.srcObject = null;
     peerConns.current.delete(playerId);
     setState(s => ({
@@ -78,7 +78,11 @@ export function useVoiceChat(gameId: string, myPlayerId: string) {
     }
 
     pc.ontrack = (e) => {
-      if (e.streams[0]) audioEl.srcObject = e.streams[0];
+      if (e.streams[0]) {
+        audioEl.srcObject = e.streams[0];
+        // Force play to overcome autoplay restrictions
+        audioEl.play().catch(() => {});
+      }
     };
 
     pc.onicecandidate = (e) => {
@@ -93,7 +97,7 @@ export function useVoiceChat(gameId: string, myPlayerId: string) {
     };
 
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === "failed") {
+      if (pc.connectionState === "failed" || pc.connectionState === "closed") {
         closePeer(playerId);
       }
     };
@@ -118,7 +122,6 @@ export function useVoiceChat(gameId: string, myPlayerId: string) {
       localStream.current = stream;
       enabledRef.current = true;
 
-      // Voice activity detection
       const ctx = new AudioContext();
       audioCtx.current = ctx;
       const src = ctx.createMediaStreamSource(stream);
@@ -139,7 +142,6 @@ export function useVoiceChat(gameId: string, myPlayerId: string) {
       };
       vadFrame.current = requestAnimationFrame(vad);
 
-      // Load mic list
       const devices = await navigator.mediaDevices.enumerateDevices();
       const mics = devices.filter(d => d.kind === "audioinput");
       patch({ enabled: true, inputDevices: mics, selectedDeviceId: deviceId || mics[0]?.deviceId || "" });
@@ -153,13 +155,14 @@ export function useVoiceChat(gameId: string, myPlayerId: string) {
 
   const disable = useCallback(() => {
     cancelAnimationFrame(vadFrame.current);
-    audioCtx.current?.close();
+    try { audioCtx.current?.close(); } catch { /* ignore */ }
     audioCtx.current = null;
     if (localStream.current) {
       for (const t of localStream.current.getTracks()) t.stop();
       localStream.current = null;
     }
-    for (const [pid] of peerConns.current) closePeer(pid);
+    const pids = Array.from(peerConns.current.keys());
+    for (const pid of pids) closePeer(pid);
     enabledRef.current = false;
     getSocket().emit("voice:leave", { gameId, playerId: myPlayerId });
     getSocket().emit("voice:speaking", { gameId, playerId: myPlayerId, speaking: false });
@@ -169,11 +172,13 @@ export function useVoiceChat(gameId: string, myPlayerId: string) {
 
   const toggleMute = useCallback(() => {
     if (!localStream.current) return;
-    const nowMuted = !state.muted;
-    for (const t of localStream.current.getAudioTracks()) t.enabled = !nowMuted;
-    patch({ muted: nowMuted });
-    if (nowMuted) getSocket().emit("voice:speaking", { gameId, playerId: myPlayerId, speaking: false });
-  }, [state.muted, gameId, myPlayerId]);
+    setState(s => {
+      const nowMuted = !s.muted;
+      for (const t of localStream.current!.getAudioTracks()) t.enabled = !nowMuted;
+      if (nowMuted) getSocket().emit("voice:speaking", { gameId, playerId: myPlayerId, speaking: false });
+      return { ...s, muted: nowMuted };
+    });
+  }, [gameId, myPlayerId]);
 
   const changeMic = useCallback((deviceId: string) => {
     patch({ selectedDeviceId: deviceId });
@@ -189,7 +194,6 @@ export function useVoiceChat(gameId: string, myPlayerId: string) {
     for (const [, conn] of peerConns.current) conn.audioEl.volume = v;
   }, []);
 
-  // Socket event handlers for voice
   useEffect(() => {
     if (!gameId || !myPlayerId) return;
     const socket = getSocket();
@@ -219,26 +223,38 @@ export function useVoiceChat(gameId: string, myPlayerId: string) {
       closePeer(playerId);
     }
 
-    async function onSignal({ fromPlayerId, signal }: { fromPlayerId: string; signal: { type: string; sdp?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit } }) {
-      const conn = peerConns.current.get(fromPlayerId);
+    async function onSignal({ fromPlayerId, fromSocketId, signal }: {
+      fromPlayerId: string;
+      fromSocketId: string;
+      signal: { type: string; sdp?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit };
+    }) {
+      // Fix race condition: if peer not found but we have their socketId, create peer entry
+      let conn = peerConns.current.get(fromPlayerId);
+      if (!conn && fromSocketId && enabledRef.current) {
+        conn = getPeer(fromPlayerId, fromSocketId);
+      }
       if (!conn) return;
-      const { pc, socketId } = conn;
+      const { pc } = conn;
+      // Update socketId if we got it via signal (race condition safety)
+      if (fromSocketId) conn.socketId = fromSocketId;
+
       try {
         if (signal.type === "offer" && signal.sdp) {
           await pc.setRemoteDescription(signal.sdp);
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
-          getSocket().emit("voice:signal", {
-            toSocketId: socketId,
+          socket.emit("voice:signal", {
+            toSocketId: conn.socketId,
             fromPlayerId: myPlayerId,
             signal: { type: "answer", sdp: pc.localDescription },
           });
         } else if (signal.type === "answer" && signal.sdp) {
+          if (pc.signalingState !== "have-local-offer") return;
           await pc.setRemoteDescription(signal.sdp);
         } else if (signal.type === "ice" && signal.candidate) {
-          await pc.addIceCandidate(signal.candidate);
+          if (pc.remoteDescription) await pc.addIceCandidate(signal.candidate);
         }
-      } catch (e) { console.error("[voice] signal error:", e); }
+      } catch (e) { console.error("[voice] signal error:", signal.type, e); }
     }
 
     function onSpeaking({ playerId, speaking: s }: { playerId: string; speaking: boolean }) {

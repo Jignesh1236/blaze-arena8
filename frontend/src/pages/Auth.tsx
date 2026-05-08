@@ -2,18 +2,17 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useGuest } from "@/lib/use-guest";
 import { Seo } from "@/components/Seo";
-
-const AVATARS = ["🤠", "🐴", "🌵", "🦂", "🪶", "⭐", "🌙", "🔥", "🎩", "🐺"];
+import { AVATAR_SEEDS, avatarUrl } from "@/lib/avatar";
 
 export default function AuthPage() {
   const { profile, loading, save } = useGuest();
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const [name, setName] = useState("");
-  const [avatar, setAvatar] = useState("🤠");
+  const [avatar, setAvatar] = useState(AVATAR_SEEDS[0]);
 
   useEffect(() => {
-    if (profile) { setName(profile.name); setAvatar(profile.avatar); }
+    if (profile) { setName(profile.name); setAvatar(profile.avatar || AVATAR_SEEDS[0]); }
   }, [profile]);
 
   if (loading) return null;
@@ -38,13 +37,21 @@ export default function AuthPage() {
               className="w-full px-3 py-2 rounded-lg bg-black/30 border border-border outline-none" />
           </div>
           <div>
-            <label className="block text-sm mb-1 font-display">Avatar</label>
-            <div className="grid grid-cols-5 gap-2">
-              {AVATARS.map((a) => (
-                <button key={a} type="button" onClick={() => setAvatar(a)}
-                  className={`text-2xl aspect-square rounded-lg border-2 ${avatar === a ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10" : "border-border"}`}>{a}</button>
+            <label className="block text-sm mb-1 font-display">Choose your look</label>
+            <div className="grid grid-cols-6 gap-2">
+              {AVATAR_SEEDS.map((seed) => (
+                <button key={seed} type="button" onClick={() => setAvatar(seed)}
+                  className={`aspect-square rounded-xl border-2 overflow-hidden transition-all ${avatar === seed ? "border-[var(--color-accent)] scale-110 shadow-glow" : "border-border hover:border-amber-400/40"}`}>
+                  <img src={avatarUrl(seed)} alt={seed} className="w-full h-full object-cover" loading="lazy" />
+                </button>
               ))}
             </div>
+            {avatar && (
+              <div className="mt-3 flex items-center gap-3">
+                <img src={avatarUrl(avatar)} alt="selected" className="w-12 h-12 rounded-full border-2 border-amber-400/50" />
+                <span className="text-xs font-display opacity-60">Selected: {avatar}</span>
+              </div>
+            )}
           </div>
           <button type="submit" className="w-full bg-sunset font-display h-12 text-lg rounded-lg">Saddle up 🤠</button>
         </form>
