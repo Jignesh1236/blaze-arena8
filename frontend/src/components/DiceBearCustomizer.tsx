@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback } from "react";
 
 // DiceBear adventurer style options
 const HAIR_OPTIONS = [
@@ -90,107 +90,8 @@ interface Props {
 
 type Tab = "hair" | "eyes" | "mouth" | "colors";
 
-const AD_URL = "https://sadpicture.com/dIm/FRz.duG/NyveZWGvUS/Le/mX9cu/ZFUdlfkpP/TncMwdMCjzcc4JO/TiMLtWNIz/AOyiNzzvg/5AN/yyZosGaiWc1/psd/Df0axy";
-
-function AdPopupModal({ onComplete, onClose }: { onComplete: () => void; onClose?: () => void }) {
-  const [secondsLeft, setSecondsLeft] = useState(5);
-  const [canSkip, setCanSkip] = useState(false);
-  const [showIframe, setShowIframe] = useState(false);
-
-  useEffect(() => {
-    // Small delay to show popup first, then load iframe
-    const loadTimer = setTimeout(() => setShowIframe(true), 300);
-    
-    const timer = setInterval(() => {
-      setSecondsLeft((prev) => {
-        if (prev <= 1) {
-          setCanSkip(true);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => {
-      clearTimeout(loadTimer);
-      clearInterval(timer);
-    };
-  }, []);
-
-  return (
-    <div className="fixed inset-0 z-[300] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.85)" }}>
-      <div className="w-full max-w-2xl rounded-2xl border border-amber-200/20 shadow-2xl overflow-hidden" style={{ background: "rgba(10,6,4,0.98)" }}>
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-amber-200/10 bg-black/40">
-          <div className="flex items-center gap-2">
-            <span className="text-amber-400 text-xs font-display tracking-wider">AD</span>
-            <span className="font-display text-sm text-amber-200/80">Watch to Unlock Avatar</span>
-          </div>
-          <button 
-            onClick={onClose} 
-            className="text-amber-200/40 hover:text-amber-200/80 text-xl leading-none"
-            title="Close"
-          >
-            ×
-          </button>
-        </div>
-
-        {/* Ad Iframe Container */}
-        <div className="relative w-full h-64 sm:h-80 md:h-96 bg-black/60">
-          {showIframe && (
-            <iframe
-              src={AD_URL}
-              className="w-full h-full border-0"
-              sandbox="allow-scripts allow-same-origin allow-popups"
-              title="Advertisement"
-            />
-          )}
-          {!showIframe && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="flex flex-col items-center gap-2">
-                <div className="w-10 h-10 border-2 border-amber-400/30 border-t-amber-400 rounded-full animate-spin" />
-                <span className="text-xs text-amber-200/40 font-display">Loading ad…</span>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Footer with timer / skip button */}
-        <div className="flex items-center justify-between px-4 py-3 border-t border-amber-200/10 bg-black/40">
-          <div className="flex items-center gap-2">
-            <div className="h-1.5 w-24 bg-white/10 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-amber-400 rounded-full transition-all"
-                style={{ width: `${((5 - secondsLeft) / 5) * 100}%` }}
-              />
-            </div>
-            <span className="text-[10px] text-amber-200/50 font-display">
-              {canSkip ? "Completed!" : `Wait ${secondsLeft}s…`}
-            </span>
-          </div>
-          
-          <button
-            onClick={onComplete}
-            disabled={!canSkip}
-            className={`px-4 py-2 rounded-xl font-display text-sm transition-all ${
-              canSkip 
-                ? "bg-amber-500 hover:bg-amber-400 text-white" 
-                : "bg-white/10 text-amber-200/30 cursor-not-allowed"
-            }`}
-          >
-            {canSkip ? "Continue →" : "Skip Locked"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function DiceBearCustomizer({ value, onChange, onClose }: Props) {
   const [tab, setTab] = useState<Tab>("hair");
-  const [hairIdx, setHairIdx] = useState(() => HAIR_OPTIONS.indexOf(value.hair ?? "") || 0);
-  const [eyeIdx, setEyeIdx] = useState(() => EYE_OPTIONS.indexOf(value.eyes ?? "") || 0);
-  const [mouthIdx, setMouthIdx] = useState(() => MOUTH_OPTIONS.indexOf(value.mouth ?? "") || 0);
 
   const preview = buildAvatarUrl(value);
 
@@ -198,27 +99,8 @@ export function DiceBearCustomizer({ value, onChange, onClose }: Props) {
     onChange({ ...value, ...patch });
   }, [value, onChange]);
 
-  function cycleHair(dir: 1 | -1) {
-    const n = ((hairIdx + dir) + HAIR_OPTIONS.length) % HAIR_OPTIONS.length;
-    setHairIdx(n);
-    update({ hair: HAIR_OPTIONS[n] });
-  }
-  function cycleEye(dir: 1 | -1) {
-    const n = ((eyeIdx + dir) + EYE_OPTIONS.length) % EYE_OPTIONS.length;
-    setEyeIdx(n);
-    update({ eyes: EYE_OPTIONS[n] });
-  }
-  function cycleMouth(dir: 1 | -1) {
-    const n = ((mouthIdx + dir) + MOUTH_OPTIONS.length) % MOUTH_OPTIONS.length;
-    setMouthIdx(n);
-    update({ mouth: MOUTH_OPTIONS[n] });
-  }
-
   function handleRandom() {
     const cfg = randomConfig();
-    setHairIdx(HAIR_OPTIONS.indexOf(cfg.hair!));
-    setEyeIdx(EYE_OPTIONS.indexOf(cfg.eyes!));
-    setMouthIdx(MOUTH_OPTIONS.indexOf(cfg.mouth!));
     onChange(cfg);
   }
 
@@ -230,141 +112,165 @@ export function DiceBearCustomizer({ value, onChange, onClose }: Props) {
   ];
 
   return (
-    <div
-      className="w-full max-w-sm rounded-2xl border border-amber-200/15 overflow-hidden shadow-2xl"
-      style={{ background: "rgba(10,6,4,0.97)", backdropFilter: "blur(16px)" }}
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-amber-200/10">
-        <span className="font-display text-sm text-amber-200/90 tracking-wide">Customize Avatar</span>
-        <button onClick={onClose} className="text-amber-200/40 hover:text-amber-200/80 text-xl leading-none">×</button>
-      </div>
-
-      {/* Preview */}
-      <div className="flex items-center justify-center py-4 gap-4">
-        <img
-          src={preview}
-          alt="avatar preview"
-          className="w-24 h-24 rounded-full border-2 border-amber-400/50 bg-white/5"
-        />
-        <button
-          type="button"
-          onClick={handleRandom}
-          className="px-3 py-2 rounded-xl bg-amber-500/20 border border-amber-400/30 text-amber-300 text-xs font-display hover:bg-amber-500/30 transition-colors"
-        >
-          ↻ Random
-        </button>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex border-b border-amber-200/10">
-        {TABS.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`flex-1 py-2 text-xs font-display transition-colors ${tab === t.id ? "text-amber-300 border-b-2 border-amber-400" : "text-amber-200/40 hover:text-amber-200/70"}`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Tab Content */}
-      <div className="px-4 py-3 space-y-3">
-        {tab === "hair" && (
-          <div className="flex items-center justify-between gap-3">
-            <button onClick={() => cycleHair(-1)} className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-amber-200/60 hover:bg-white/10 text-lg flex items-center justify-center">‹</button>
-            <div className="flex-1 text-center">
-              <div className="text-[10px] font-display text-amber-200/40 mb-1">HAIR STYLE</div>
-              <div className="text-xs font-display text-amber-200/80">{HAIR_OPTIONS[hairIdx]}</div>
-              <div className="text-[9px] text-amber-200/30 mt-0.5">{hairIdx + 1} / {HAIR_OPTIONS.length}</div>
+    <div className="fixed inset-0 z-[1100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div
+        className="w-full max-w-xl rounded-3xl border border-amber-200/15 overflow-hidden shadow-2xl flex flex-col md:flex-row animate-in zoom-in-95 duration-200"
+        style={{ background: "rgba(10,6,4,0.97)", backdropFilter: "blur(16px)" }}
+      >
+        {/* Left Side: Large Preview */}
+        <div className="md:w-1/2 p-6 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-amber-200/10 bg-black/20">
+          <div className="relative group">
+            <img
+              src={preview}
+              alt="avatar preview"
+              className="w-48 h-48 rounded-full border-4 border-amber-400/50 bg-white/5 shadow-2xl transition-transform duration-500 group-hover:scale-105"
+            />
+            <div className="absolute -bottom-2 -right-2 w-10 h-10 bg-amber-500 rounded-full flex items-center justify-center shadow-lg border-2 border-amber-200 animate-pulse">
+              <span className="text-xl">✨</span>
             </div>
-            <button onClick={() => cycleHair(1)} className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-amber-200/60 hover:bg-white/10 text-lg flex items-center justify-center">›</button>
           </div>
-        )}
-
-        {tab === "eyes" && (
-          <div className="flex items-center justify-between gap-3">
-            <button onClick={() => cycleEye(-1)} className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-amber-200/60 hover:bg-white/10 text-lg flex items-center justify-center">‹</button>
-            <div className="flex-1 text-center">
-              <div className="text-[10px] font-display text-amber-200/40 mb-1">EYES</div>
-              <div className="text-xs font-display text-amber-200/80">{EYE_OPTIONS[eyeIdx]}</div>
-              <div className="text-[9px] text-amber-200/30 mt-0.5">{eyeIdx + 1} / {EYE_OPTIONS.length}</div>
-            </div>
-            <button onClick={() => cycleEye(1)} className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-amber-200/60 hover:bg-white/10 text-lg flex items-center justify-center">›</button>
+          
+          <div className="mt-8 flex flex-col gap-3 w-full">
+            <button
+              type="button"
+              onClick={handleRandom}
+              className="w-full h-12 rounded-xl bg-amber-500/10 border border-amber-400/30 text-amber-300 font-display hover:bg-amber-500/20 transition-all flex items-center justify-center gap-2"
+            >
+              ↻ Randomize Look
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full h-12 bg-sunset font-display text-base rounded-xl hover:scale-[1.02] active:scale-[0.98] transition-all shadow-lg shadow-amber-500/20"
+            >
+              Use This Avatar
+            </button>
           </div>
-        )}
+        </div>
 
-        {tab === "mouth" && (
-          <div className="flex items-center justify-between gap-3">
-            <button onClick={() => cycleMouth(-1)} className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-amber-200/60 hover:bg-white/10 text-lg flex items-center justify-center">‹</button>
-            <div className="flex-1 text-center">
-              <div className="text-[10px] font-display text-amber-200/40 mb-1">MOUTH</div>
-              <div className="text-xs font-display text-amber-200/80">{MOUTH_OPTIONS[mouthIdx]}</div>
-              <div className="text-[9px] text-amber-200/30 mt-0.5">{mouthIdx + 1} / {MOUTH_OPTIONS.length}</div>
-            </div>
-            <button onClick={() => cycleMouth(1)} className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-amber-200/60 hover:bg-white/10 text-lg flex items-center justify-center">›</button>
+        {/* Right Side: Options Grid */}
+        <div className="md:w-1/2 flex flex-col h-[500px]">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-amber-200/10 bg-black/40">
+            <span className="font-display text-sm text-amber-200/90 tracking-widest uppercase">Customize</span>
+            <button onClick={onClose} className="text-amber-200/40 hover:text-amber-200/80 text-2xl leading-none transition-colors">×</button>
           </div>
-        )}
 
-        {tab === "colors" && (
-          <div className="space-y-3">
-            <div>
-              <div className="text-[9px] font-display text-amber-200/40 mb-1.5 tracking-widest">SKIN TONE</div>
-              <div className="flex gap-1.5 flex-wrap">
-                {SKIN_COLORS.map(c => (
+          {/* Tabs */}
+          <div className="flex px-4 pt-4 gap-1">
+            {TABS.map(t => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={`flex-1 py-2 text-[10px] font-display rounded-lg transition-all uppercase tracking-tighter ${
+                  tab === t.id 
+                    ? "bg-amber-500 text-white shadow-lg shadow-amber-500/20" 
+                    : "text-amber-200/40 hover:text-amber-200/70 hover:bg-white/5"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Grid Content */}
+          <div className="flex-1 overflow-y-auto p-4 no-scrollbar">
+            {tab === "hair" && (
+              <div className="grid grid-cols-3 gap-2">
+                {HAIR_OPTIONS.map(h => (
                   <button
-                    key={c}
-                    onClick={() => update({ skinColor: c })}
-                    className={`w-7 h-7 rounded-full border-2 transition-all ${value.skinColor === c ? "border-amber-400 scale-110" : "border-white/20 hover:border-amber-400/50"}`}
-                    style={{ backgroundColor: `#${c}` }}
-                  />
+                    key={h}
+                    onClick={() => update({ hair: h })}
+                    className={`aspect-square rounded-xl border-2 p-1 transition-all ${
+                      value.hair === h ? "border-amber-400 bg-amber-500/10 scale-95" : "border-white/5 hover:border-amber-400/30 bg-white/5"
+                    }`}
+                  >
+                    <img src={buildAvatarUrl({ ...value, hair: h })} alt={h} className="w-full h-full object-contain" />
+                  </button>
                 ))}
               </div>
-            </div>
-            <div>
-              <div className="text-[9px] font-display text-amber-200/40 mb-1.5 tracking-widest">HAIR COLOR</div>
-              <div className="flex gap-1 flex-wrap">
-                {HAIR_COLORS.map(c => (
-                  <button
-                    key={c}
-                    onClick={() => update({ hairColor: c })}
-                    className={`w-6 h-6 rounded-full border-2 transition-all ${value.hairColor === c ? "border-amber-400 scale-110" : "border-white/20 hover:border-amber-400/50"}`}
-                    style={{ backgroundColor: `#${c}` }}
-                  />
-                ))}
-              </div>
-            </div>
-            <div>
-              <div className="text-[9px] font-display text-amber-200/40 mb-1.5 tracking-widest">BACKGROUND</div>
-              <div className="flex gap-1.5 flex-wrap">
-                {BG_COLORS.map(c => (
-                  <button
-                    key={c}
-                    onClick={() => update({ backgroundColor: c })}
-                    className={`w-7 h-7 rounded-full border-2 transition-all ${value.backgroundColor === c ? "border-amber-400 scale-110" : "border-white/20 hover:border-amber-400/50"}`}
-                    style={{
-                      backgroundColor: c === "transparent" ? undefined : `#${c}`,
-                      backgroundImage: c === "transparent" ? "repeating-conic-gradient(#666 0% 25%, #999 0% 50%)" : undefined,
-                      backgroundSize: "8px 8px"
-                    }}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+            )}
 
-      {/* Done button */}
-      <div className="px-4 pb-4 pt-2">
-        <button
-          type="button"
-          onClick={onClose}
-          className="w-full h-10 bg-sunset font-display text-sm rounded-xl hover:opacity-90 transition-opacity"
-        >
-          Use This Avatar
-        </button>
+            {tab === "eyes" && (
+              <div className="grid grid-cols-3 gap-2">
+                {EYE_OPTIONS.map(e => (
+                  <button
+                    key={e}
+                    onClick={() => update({ eyes: e })}
+                    className={`aspect-square rounded-xl border-2 p-1 transition-all ${
+                      value.eyes === e ? "border-amber-400 bg-amber-500/10 scale-95" : "border-white/5 hover:border-amber-400/30 bg-white/5"
+                    }`}
+                  >
+                    <img src={buildAvatarUrl({ ...value, eyes: e })} alt={e} className="w-full h-full object-contain" />
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {tab === "mouth" && (
+              <div className="grid grid-cols-3 gap-2">
+                {MOUTH_OPTIONS.map(m => (
+                  <button
+                    key={m}
+                    onClick={() => update({ mouth: m })}
+                    className={`aspect-square rounded-xl border-2 p-1 transition-all ${
+                      value.mouth === m ? "border-amber-400 bg-amber-500/10 scale-95" : "border-white/5 hover:border-amber-400/30 bg-white/5"
+                    }`}
+                  >
+                    <img src={buildAvatarUrl({ ...value, mouth: m })} alt={m} className="w-full h-full object-contain" />
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {tab === "colors" && (
+              <div className="space-y-6 p-2">
+                <div>
+                  <div className="text-[10px] font-display text-amber-200/40 mb-3 tracking-widest uppercase">Skin Tone</div>
+                  <div className="flex gap-2 flex-wrap">
+                    {SKIN_COLORS.map(c => (
+                      <button
+                        key={c}
+                        onClick={() => update({ skinColor: c })}
+                        className={`w-8 h-8 rounded-full border-2 transition-all ${value.skinColor === c ? "border-amber-400 scale-110" : "border-white/10 hover:border-amber-400/50"}`}
+                        style={{ backgroundColor: `#${c}` }}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-display text-amber-200/40 mb-3 tracking-widest uppercase">Hair Color</div>
+                  <div className="flex gap-2 flex-wrap">
+                    {HAIR_COLORS.map(c => (
+                      <button
+                        key={c}
+                        onClick={() => update({ hairColor: c })}
+                        className={`w-7 h-7 rounded-full border-2 transition-all ${value.hairColor === c ? "border-amber-400 scale-110" : "border-white/10 hover:border-amber-400/50"}`}
+                        style={{ backgroundColor: `#${c}` }}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-display text-amber-200/40 mb-3 tracking-widest uppercase">Background</div>
+                  <div className="flex gap-2 flex-wrap">
+                    {BG_COLORS.map(c => (
+                      <button
+                        key={c}
+                        onClick={() => update({ backgroundColor: c })}
+                        className={`w-8 h-8 rounded-full border-2 transition-all ${value.backgroundColor === c ? "border-amber-400 scale-110" : "border-white/10 hover:border-amber-400/50"}`}
+                        style={{
+                          backgroundColor: c === "transparent" ? undefined : `#${c}`,
+                          backgroundImage: c === "transparent" ? "repeating-conic-gradient(#666 0% 25%, #999 0% 50%)" : undefined,
+                          backgroundSize: "8px 8px"
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

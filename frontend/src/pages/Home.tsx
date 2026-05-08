@@ -241,7 +241,7 @@ export default function HomePage() {
                   </button>
                 </div>
 
-                {customizerOpen ? (
+                {customizerOpen && (
                   <DiceBearCustomizer
                     value={avatarConfig}
                     onChange={cfg => {
@@ -250,7 +250,8 @@ export default function HomePage() {
                     }}
                     onClose={() => setCustomizerOpen(false)}
                   />
-                ) : (
+                )}
+                {!customizerOpen && (
                   <>
                     <div className="grid grid-cols-6 gap-2">
                       {AVATAR_SEEDS.map((seed) => (
@@ -259,7 +260,7 @@ export default function HomePage() {
                             setAvatar(seed); 
                             setAvatarConfig({ seed }); 
                           }}
-                          className={`aspect-square rounded-xl border-2 overflow-hidden transition-all ${avatar === seed && !customizerOpen ? "border-[var(--color-accent)] scale-110" : "border-border hover:border-amber-400/40"}`}>
+                          className={`aspect-square rounded-xl border-2 overflow-hidden transition-all ${avatar === seed ? "border-[var(--color-accent)] scale-110" : "border-border hover:border-amber-400/40"}`}>
                           <img src={avatarUrl(seed)} alt={seed} className="w-full h-full object-cover" loading="lazy" />
                         </button>
                       ))}
