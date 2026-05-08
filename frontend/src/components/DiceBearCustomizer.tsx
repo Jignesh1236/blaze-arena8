@@ -188,9 +188,6 @@ function AdPopupModal({ onComplete, onClose }: { onComplete: () => void; onClose
 
 export function DiceBearCustomizer({ value, onChange, onClose }: Props) {
   const [tab, setTab] = useState<Tab>("hair");
-  const [adWatched, setAdWatched] = useState(() => {
-    try { return localStorage.getItem("blaze_avatar_ad") === "watched"; } catch { return false; }
-  });
   const [hairIdx, setHairIdx] = useState(() => HAIR_OPTIONS.indexOf(value.hair ?? "") || 0);
   const [eyeIdx, setEyeIdx] = useState(() => EYE_OPTIONS.indexOf(value.eyes ?? "") || 0);
   const [mouthIdx, setMouthIdx] = useState(() => MOUTH_OPTIONS.indexOf(value.mouth ?? "") || 0);
@@ -243,18 +240,6 @@ export function DiceBearCustomizer({ value, onChange, onClose }: Props) {
         <button onClick={onClose} className="text-amber-200/40 hover:text-amber-200/80 text-xl leading-none">×</button>
       </div>
 
-      {!adWatched && (
-        <AdPopupModal 
-          onComplete={() => {
-            try { localStorage.setItem("blaze_avatar_ad", "watched"); } catch { /* ignore */ }
-            setAdWatched(true);
-          }}
-          onClose={onClose}
-        />
-      )}
-
-      {adWatched && (
-      <>
       {/* Preview */}
       <div className="flex items-center justify-center py-4 gap-4">
         <img
@@ -381,8 +366,6 @@ export function DiceBearCustomizer({ value, onChange, onClose }: Props) {
           Use This Avatar
         </button>
       </div>
-      </>
-      )}
     </div>
   );
 }

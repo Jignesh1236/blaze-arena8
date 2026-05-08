@@ -44,7 +44,6 @@ export default function HomePage() {
   const [avatar, setAvatar] = useState(AVATAR_SEEDS[0]);
   const [avatarConfig, setAvatarConfig] = useState<AvatarConfig>(DEFAULT_CONFIG);
   const [customizerOpen, setCustomizerOpen] = useState(false);
-  const [adWatched, setAdWatched] = useState(false);
   const [adLoading, setAdLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -136,36 +135,49 @@ export default function HomePage() {
   const activeGames = games.filter((g) => g.status === "lobby" || g.status === "playing");
   const previewUrl = avatarUrl(configToSeed(avatarConfig));
 
+  const AD_URL = "//sadpicture.com/dIm/FRz.duG/NyveZWGvUS/Le/mX9cu/ZFUdlfkpP/TncMwdMCjzcc4JO/TiMLtWNIz/AOyiNzzvg/5AN/yyZosGaiWc1/psd/Df0axy";
+
   function handleCustomizeClick() {
-    if (adWatched) {
-      setCustomizerOpen(true);
-    } else {
-      setAdLoading(true);
-      // Simulate ad loading and playing
-      setTimeout(() => {
-        setAdLoading(false);
-        setAdWatched(true);
-        setCustomizerOpen(true);
-      }, 5000); // 5 second "ad"
-    }
+    setAdLoading(true);
   }
 
   return (
     <main className="min-h-screen relative overflow-hidden bg-table">
       {adLoading && (
-        <div className="fixed inset-0 z-[1000] bg-black/90 flex flex-col items-center justify-center p-6 text-center">
-          <div className="w-20 h-20 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mb-6" />
-          <h2 className="font-display text-2xl text-amber-200 mb-2">Watching Sponsor Video...</h2>
-          <p className="text-amber-200/60 max-w-xs mx-auto">Customization will be unlocked in a few seconds. Support us to keep the saloon open! 🤠</p>
-          <div className="mt-8 w-64 h-2 bg-white/10 rounded-full overflow-hidden">
-            <div className="h-full bg-amber-500 animate-[progress_5s_linear_forwards]" />
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.9)" }}>
+          <div className="w-full max-w-2xl rounded-2xl border border-amber-200/20 shadow-2xl overflow-hidden flex flex-col" style={{ background: "rgba(10,6,4,0.98)" }}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-amber-200/10 bg-black/40">
+              <div className="flex items-center gap-2">
+                <span className="text-amber-400 text-xs font-display tracking-wider">SPONSOR AD</span>
+                <span className="font-display text-sm text-amber-200/80">Support us to unlock customization! 🤠</span>
+              </div>
+              <button onClick={() => setAdLoading(false)} className="text-amber-200/40 hover:text-amber-200/80 text-2xl leading-none">×</button>
+            </div>
+            
+            <div className="relative w-full aspect-video bg-black/60">
+              <iframe
+                src={AD_URL}
+                className="w-full h-full border-0"
+                sandbox="allow-scripts allow-same-origin allow-popups"
+                title="Advertisement"
+              />
+            </div>
+
+            <div className="flex items-center justify-between px-4 py-4 border-t border-amber-200/10 bg-black/40">
+              <p className="text-[11px] text-amber-200/40 font-display max-w-[60%]">
+                Closing this ad will return you to the saloon. Click below to start customizing!
+              </p>
+              <button
+                onClick={() => {
+                  setAdLoading(false);
+                  setCustomizerOpen(true);
+                }}
+                className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-white font-display text-sm shadow-lg shadow-amber-500/20 transition-all active:scale-95"
+              >
+                Start Customizing →
+              </button>
+            </div>
           </div>
-          <style>{`
-            @keyframes progress {
-              from { width: 0%; }
-              to { width: 100%; }
-            }
-          `}</style>
         </div>
       )}
       <Seo
@@ -225,14 +237,17 @@ export default function HomePage() {
                     onClick={handleCustomizeClick}
                     className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg bg-amber-500/20 border border-amber-400/30 text-amber-300 hover:bg-amber-500/30 transition-colors font-display"
                   >
-                    {adWatched ? "✦ Customize" : "📺 Watch Ad to Customize"}
+                    ✦ Customize
                   </button>
                 </div>
 
                 {customizerOpen ? (
                   <DiceBearCustomizer
                     value={avatarConfig}
-                    onChange={cfg => setAvatarConfig(cfg)}
+                    onChange={cfg => {
+                      setAvatarConfig(cfg);
+                      setAvatar(configToSeed(cfg));
+                    }}
                     onClose={() => setCustomizerOpen(false)}
                   />
                 ) : (
@@ -240,7 +255,10 @@ export default function HomePage() {
                     <div className="grid grid-cols-6 gap-2">
                       {AVATAR_SEEDS.map((seed) => (
                         <button key={seed} type="button"
-                          onClick={() => { setAvatar(seed); setAvatarConfig({ seed }); }}
+                          onClick={() => { 
+                            setAvatar(seed); 
+                            setAvatarConfig({ seed }); 
+                          }}
                           className={`aspect-square rounded-xl border-2 overflow-hidden transition-all ${avatar === seed && !customizerOpen ? "border-[var(--color-accent)] scale-110" : "border-border hover:border-amber-400/40"}`}>
                           <img src={avatarUrl(seed)} alt={seed} className="w-full h-full object-cover" loading="lazy" />
                         </button>
