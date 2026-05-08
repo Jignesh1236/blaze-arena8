@@ -10,6 +10,8 @@ import { getSocket } from "@/lib/socket";
 
 import { canPlay, type Card, type GameRow, type Suit, SUIT_HEX, SUIT_SYMBOL } from "@/lib/game";
 
+import { avatarUrl } from "@/lib/avatar";
+
 import { PlayingCard } from "@/components/PlayingCard";
 
 import { PlayerSeat } from "@/components/PlayerSeat";
