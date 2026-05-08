@@ -47,7 +47,13 @@ export function genRoomCode(): string {
   return s;
 }
 
-export interface Player { id: string; name: string; avatar: string }
+export interface Player { id: string; name: string; avatar: string; isBot?: boolean }
+
+export interface VoteData {
+  targetId: string;
+  votes: Record<string, "yes" | "no">;
+  startedAt: string;
+}
 
 export interface GameRow {
   id: string;
@@ -68,6 +74,7 @@ export interface GameRow {
   winner_id: string | null;
   last_turn_at: string | null;
   updated_at: string;
+  activeVote: VoteData | null;
 }
 
 export const SUIT_SYMBOL: Record<Suit, string> = {

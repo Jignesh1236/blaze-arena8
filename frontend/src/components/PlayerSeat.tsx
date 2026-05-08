@@ -2,12 +2,17 @@ import type { Player } from "@/lib/game";
 import { PlayingCard } from "./PlayingCard";
 import { avatarUrl } from "@/lib/avatar";
 
-export function PlayerSeat({ player, cardCount, isCurrent, isHost, isSpeaking }: {
+export function PlayerSeat({ player, cardCount, isCurrent, isHost, isSpeaking, onVote }: {
   player: Player; cardCount: number; isCurrent?: boolean; isHost?: boolean; isSpeaking?: boolean;
+  onVote?: (id: string) => void;
 }) {
   return (
     <div className={`flex flex-col items-center gap-1.5 transition-all duration-500 ${isCurrent ? "scale-115 z-30" : "scale-100 z-10"}`}>
-      <div className="relative group">
+      <div className="relative group cursor-pointer" onClick={() => onVote?.(player.id)}>
+        {/* Vote Hint */}
+        <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black/80 text-[8px] font-display px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 pointer-events-none uppercase tracking-tighter">
+          Click to Vote Kick
+        </div>
         {/* Fan of face-down cards behind avatar */}
         <div className="absolute inset-0 flex items-center justify-center -z-10">
           {Array.from({ length: Math.min(cardCount, 5) }).map((_, i) => (

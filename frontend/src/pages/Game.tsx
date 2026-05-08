@@ -93,6 +93,9 @@ export default function GamePage() {
 
   const [switchOverlay, setSwitchOverlay] = useState<SwitchOverlay | null>(null);
 
+  const [voteOverlay, setVoteOverlay] = useState<{ targetId: string; yesVotes: number; totalPlayers: number } | null>(null);
+  const [kickNotification, setKickNotification] = useState<{ secondsLeft: number } | null>(null);
+
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const { state: voiceState, enable: enableVoice, disable: disableVoice, toggleMute, changeMic, setVolume } = useVoiceChat(id, profile?.id || "");
@@ -441,6 +444,47 @@ export default function GamePage() {
 
   const topCard = game?.discard?.[game.discard.length - 1] ?? null;
 
+  // Handle active vote
+  useEffect(() => {
+    if (!game?.activeVote) {
+      setVoteOverlay(null);
+      setKickNotification(null);
+      return;
+    }
+
+    const { targetId, votes } = game.activeVote;
+    const yesVotes = Object.values(votes).filter(v => v === "yes").length;
+    const totalPlayers = game.players.length;
+
+    setVoteOverlay({ targetId, yesVotes, totalPlayers });
+
+    // If I am the target and vote passed
+    if (targetId === youId && yesVotes > totalPlayers / 2) {
+      if (!kickNotification) {
+        setKickNotification({ secondsLeft: 5 });
+        const timer = setInterval(() => {
+          setKickNotification(prev => {
+            if (!prev) {
+              clearInterval(timer);
+              return null;
+            }
+            if (prev.secondsLeft <= 1) {
+              clearInterval(timer);
+              // Actual move to spectator
+              api.becomeSpectator(game.id, youId).catch(console.error);
+              return null;
+            }
+            return { secondsLeft: prev.secondsLeft - 1 };
+          });
+        }, 1000);
+        addTimer(timer);
+      }
+    } else if (kickNotification) {
+      // If vote was cancelled or target changed
+      setKickNotification(null);
+    }
+  }, [game?.activeVote, youId, game?.id, kickNotification]);
+
   const isYourTurn = game?.current_turn === youId && game?.status === "playing";
 
   const isPlayer = !!(youId && game?.players.some(p => p.id === youId));
@@ -772,6 +816,60 @@ export default function GamePage() {
 
 
 
+      {/* ── Vote Overlay ── */}
+      {voteOverlay && !kickNotification && (
+        <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-card/95 border-2 border-amber-200/20 rounded-2xl p-6 max-w-sm w-full shadow-2xl text-center">
+            <h3 className="font-display text-lg mb-2 text-amber-200">KICK VOTE</h3>
+            <p className="text-sm opacity-80 mb-4">
+              Move <span className="font-bold text-amber-400">{game.players.find(p => p.id === voteOverlay.targetId)?.name}</span> to spectators?
+            </p>
+            <div className="flex items-center justify-center gap-4 mb-6">
+              <div className="text-center">
+                <div className="text-xs opacity-50 uppercase font-display">Votes</div>
+                <div className="text-2xl font-display text-green-400">{voteOverlay.yesVotes} / {voteOverlay.totalPlayers}</div>
+              </div>
+            </div>
+            {youId !== voteOverlay.targetId && !game.activeVote?.votes[youId!] && (
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => api.castVote(game.id, youId!, "yes")}
+                  className="flex-1 bg-green-600 hover:bg-green-500 font-display py-2 rounded-xl transition-colors"
+                >YES</button>
+                <button 
+                  onClick={() => api.castVote(game.id, youId!, "no")}
+                  className="flex-1 bg-red-600 hover:bg-red-500 font-display py-2 rounded-xl transition-colors"
+                >NO</button>
+              </div>
+            )}
+            {(youId === voteOverlay.targetId || game.activeVote?.votes[youId!]) && (
+              <p className="text-xs italic opacity-60">Waiting for others to vote...</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Kick Notification ── */}
+      {kickNotification && (
+        <div className="fixed inset-0 z-[500] flex items-center justify-center p-4 bg-red-950/80 backdrop-blur-md">
+          <div className="bg-card border-4 border-red-500/40 rounded-3xl p-8 max-w-md w-full shadow-2xl text-center animate-bounce">
+            <div className="text-6xl mb-4">👢</div>
+            <h2 className="font-display text-2xl text-red-400 mb-2">YOU'RE BEING BOOTED!</h2>
+            <p className="text-amber-100 opacity-80 mb-6">
+              The posse has voted. You're moving to the spectator gallery in:
+            </p>
+            <div className="text-6xl font-display text-red-500 mb-2">{kickNotification.secondsLeft}</div>
+            <button
+              onClick={() => api.cancelVote(game.id, youId!).catch(console.error)}
+              className="mt-4 w-full bg-white/10 hover:bg-white/20 border border-white/20 font-display py-3 rounded-xl transition-all uppercase tracking-widest text-sm"
+            >
+              ❌ Cancel & Stay
+            </button>
+            <p className="text-[10px] opacity-40 uppercase tracking-widest mt-4">Hurry up, partner!</p>
+          </div>
+        </div>
+      )}
+
       {/* ── Top bar ── */}
 
       <div className="relative z-20 flex items-center justify-between px-2 sm:px-4 py-2 bg-black/50 backdrop-blur-md border-b border-amber-200/10 gap-2 flex-shrink-0">
@@ -926,6 +1024,11 @@ export default function GamePage() {
                 isCurrent={game.current_turn === p.id}
                 isHost={game.host_id === p.id}
                 isSpeaking={voiceState.speaking[p.id]}
+                onVote={(targetId) => {
+                  if (game.status === "playing") {
+                    api.voteToSpectate(game.id, youId!, targetId).catch(err => setError(err.message));
+                  }
+                }}
               />
 
             </div>
@@ -1231,7 +1334,11 @@ function Lobby({ game, youId, onLeave }: { game: GameRow; youId?: string; onLeav
   }
 
   async function start() {
-
+    // Clear any leftover votes before starting
+    if (game?.activeVote) {
+      // In a real app we'd call an API to clear, 
+      // but starting a game naturally resets most state.
+    }
     setBusy(true); setError("");
 
     try { if (!youId) throw new Error("No profile"); await api.startGame(game.id, youId); }
@@ -1240,6 +1347,15 @@ function Lobby({ game, youId, onLeave }: { game: GameRow; youId?: string; onLeav
 
     finally { setBusy(false); }
 
+  }
+
+
+
+  async function addAi() {
+    setBusy(true); setError("");
+    try { if (!youId) throw new Error("No profile"); await api.addAi(game.id, youId); }
+    catch (e) { setError((e as Error).message); }
+    finally { setBusy(false); }
   }
 
 
@@ -1301,19 +1417,18 @@ function Lobby({ game, youId, onLeave }: { game: GameRow; youId?: string; onLeav
           {error && <p className="mt-3 text-xs font-display" style={{ color: "oklch(0.7 0.2 25)" }}>{error}</p>}
 
           {isHost ? (
-
-            <button onClick={start} disabled={busy || game.players.length < 2}
-
-              className="mt-5 w-full bg-sunset font-display h-13 text-base rounded-xl shadow-glow hover:scale-[1.02] active:scale-[0.98] transition-transform disabled:opacity-50 py-3">
-
-              {busy ? "Dealing…" : game.players.length < 2 ? "Need 2+ players" : "START GAME →"}
-
-            </button>
-
+            <div className="mt-5 space-y-3">
+              <button onClick={start} disabled={busy || game.players.length < 2}
+                className="w-full bg-sunset font-display h-13 text-base rounded-xl shadow-glow hover:scale-[1.02] active:scale-[0.98] transition-transform disabled:opacity-50 py-3">
+                {busy ? "Dealing…" : game.players.length < 2 ? "Need 2+ players" : "START GAME →"}
+              </button>
+              <button onClick={addAi} disabled={busy || game.players.length >= 6}
+                className="w-full border-2 border-amber-200/20 bg-white/5 font-display h-11 text-sm rounded-xl hover:bg-white/10 transition-colors uppercase tracking-widest">
+                + Add AI Player
+              </button>
+            </div>
           ) : (
-
             <p className="mt-5 opacity-50 font-display text-sm">Waitin' for the host…</p>
-
           )}
 
         </div>

@@ -51,4 +51,12 @@ export const api = {
     post<{ ok: true }>("/api/games/rematch", { gameId, playerId }),
   becomeSpectator: (gameId: string, playerId: string) =>
     post<{ ok: true }>("/api/games/spectate", { gameId, playerId }),
+  addAi: (gameId: string, playerId: string) =>
+    post<{ ok: true }>("/api/games/add-ai", { gameId, playerId }),
+  voteToSpectate: (gameId: string, playerId: string, targetId: string) =>
+    post<{ ok: true }>("/api/games/vote-spectate", { gameId, playerId, targetId }),
+  castVote: (gameId: string, playerId: string, vote: "yes" | "no") =>
+    post<{ ok: true }>("/api/games/cast-vote", { gameId, playerId, vote }),
+  cancelVote: (gameId: string, playerId: string) =>
+    post<{ ok: true }>("/api/games/cancel-vote", { gameId, playerId }),
 };

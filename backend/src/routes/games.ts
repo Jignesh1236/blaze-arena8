@@ -55,8 +55,124 @@ function newGame(code: string, hostId: string, host: z.infer<typeof playerSchema
     winner_id: null,
     last_turn_at: null,
     updated_at: new Date().toISOString(),
+    activeVote: null,
   };
 }
+
+games.post("/add-ai", async (c) => {
+  const { gameId, playerId } = await parseJson(
+    c,
+    z.object({ gameId: z.string().min(1), playerId: z.string().min(1) }),
+  );
+  const g = await loadGame(gameId);
+  if (g.host_id !== playerId) return c.json({ error: "Only host can add AI" }, 403);
+  if (g.players.length >= 6) return c.json({ error: "Room is full" }, 400);
+
+  const botNames = ["Billy the Kid", "Calamity Jane", "Doc Holliday", "Jesse James", "Wyatt Earp", "Buffalo Bill"];
+  const existingBots = g.players.filter(p => p.isBot).length;
+  const botName = botNames[existingBots % botNames.length] + " (AI)";
+  
+  const bot: z.infer<typeof playerSchema> & { isBot: boolean } = {
+    id: `bot-${store.newId()}`,
+    name: botName,
+    avatar: "Felix", // Default avatar for bots
+    isBot: true,
+  };
+
+  g.players.push(bot);
+  await persist(g);
+  return c.json({ ok: true });
+});
+
+games.post("/vote-spectate", async (c) => {
+  const { gameId, playerId, targetId } = await parseJson(
+    c,
+    z.object({ 
+      gameId: z.string().min(1), 
+      playerId: z.string().min(1),
+      targetId: z.string().min(1)
+    }),
+  );
+  const g = await loadGame(gameId);
+  if (g.status !== "playing") return c.json({ error: "Game not in progress" }, 400);
+  if (g.activeVote) return c.json({ error: "Vote already in progress" }, 400);
+  if (playerId === targetId) return c.json({ error: "Can't vote yourself" }, 400);
+  
+  const target = g.players.find(p => p.id === targetId);
+  if (!target) return c.json({ error: "Target player not found" }, 400);
+
+  g.activeVote = {
+    targetId,
+    votes: { [playerId]: "yes" },
+    startedAt: new Date().toISOString()
+  };
+
+  // Bots auto-vote yes
+  for (const p of g.players) {
+    if (p.isBot) {
+      g.activeVote.votes[p.id] = "yes";
+    }
+  }
+
+  await persist(g);
+  return c.json({ ok: true });
+});
+
+games.post("/cast-vote", async (c) => {
+  const { gameId, playerId, vote } = await parseJson(
+    c,
+    z.object({ 
+      gameId: z.string().min(1), 
+      playerId: z.string().min(1),
+      vote: z.enum(["yes", "no"])
+    }),
+  );
+  const g = await loadGame(gameId);
+  if (!g.activeVote) return c.json({ error: "No active vote" }, 400);
+  
+  g.activeVote.votes[playerId] = vote;
+
+  const totalPlayers = g.players.length;
+  const votes = Object.values(g.activeVote.votes);
+  const yesVotes = votes.filter(v => v === "yes").length;
+  
+  // Need simple majority (more than half of players)
+  if (yesVotes > totalPlayers / 2) {
+    // Vote passed!
+    // We don't move immediately to allow for the 5s notification on frontend
+  }
+
+  // Check if everyone voted
+  if (votes.length >= totalPlayers - 1) { // -1 because target doesn't vote
+    if (yesVotes <= totalPlayers / 2) {
+      // Vote failed, clear it
+      g.activeVote = null;
+    }
+  }
+
+  await persist(g);
+  return c.json({ ok: true });
+});
+
+games.post("/cancel-vote", async (c) => {
+  const { gameId, playerId } = await parseJson(
+    c,
+    z.object({ 
+      gameId: z.string().min(1), 
+      playerId: z.string().min(1)
+    }),
+  );
+  const g = await loadGame(gameId);
+  
+  // Only the target of the vote can cancel it
+  if (g.activeVote?.targetId === playerId) {
+    g.activeVote = null;
+    await persist(g);
+    return c.json({ ok: true });
+  }
+  
+  return c.json({ error: "Only the target can cancel the vote" }, 403);
+});
 
 games.post("/create", async (c) => {
   const { player } = await parseJson(c, z.object({ player: playerSchema }));
@@ -223,6 +339,12 @@ games.post("/leave", async (c) => {
   }
   g.players = g.players.filter((p) => p.id !== playerId);
   delete g.hands[playerId];
+  
+  // Clear vote if the player who left was involved
+  if (g.activeVote?.targetId === playerId || g.activeVote?.votes[playerId]) {
+    g.activeVote = null;
+  }
+
   if (g.players.length === 0 && g.spectators.length === 0) {
     store.delete(g.id);
     return c.json({ ok: true });
@@ -284,6 +406,11 @@ games.post("/spectate", async (c) => {
     g.spectators.push(player);
   }
   delete g.hands[playerId];
+
+  // Reset active vote if this was the target
+  if (g.activeVote?.targetId === playerId) {
+    g.activeVote = null;
+  }
 
   // If game was playing and only 1 player left, they win
   if (g.status === "playing" && g.players.length === 1) {
