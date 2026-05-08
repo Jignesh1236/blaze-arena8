@@ -34,40 +34,6 @@ function AdBanner({ adKey, width, height }: { adKey: string; width: number; heig
   return <div ref={ref} style={{ width, height, overflow: "hidden" }} />;
 }
 
-function TopBannerAd() {
-  const [visible, setVisible] = useState(true);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!visible || !ref.current) return;
-    const container = ref.current;
-    container.innerHTML = "";
-    const s = document.createElement('script');
-    s.src = "//webbedtrash.com/bbX/Vcs.daGBlu0aY/WLca/IehmH9xuhZMU/l/k/PgTHcbw-MLj/kqzpN/zfcSt-N/z/AXyIOmTQMH4dMJQu";
-    s.async = true;
-    s.referrerPolicy = 'no-referrer-when-downgrade';
-    container.appendChild(s);
-  }, [visible]);
-
-  if (!visible) return null;
-
-  return (
-    <div className="fixed top-0 left-0 right-0 z-[2000] flex justify-center bg-black/60 backdrop-blur-md py-0.5 border-b border-amber-500/10">
-      <div ref={ref} className="min-h-[50px] min-w-[300px] relative flex items-center justify-center scale-90 sm:scale-100 origin-center">
-        <div className="absolute inset-0 flex items-center justify-center -z-10 text-[9px] text-amber-200/10 font-display">
-          ADVERTISEMENT
-        </div>
-      </div>
-      <button 
-        onClick={() => setVisible(false)}
-        className="absolute right-1 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-black/40 text-amber-200/40 flex items-center justify-center hover:text-amber-200 transition-colors text-base leading-none"
-      >
-        ×
-      </button>
-    </div>
-  );
-}
-
 const DEFAULT_CONFIG: AvatarConfig = { seed: AVATAR_SEEDS[0] };
 
 export default function HomePage() {
@@ -179,7 +145,6 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen relative overflow-hidden bg-table">
-      <TopBannerAd />
       <Seo
         title="Blazing 8s — Free Real-time Multiplayer Crazy Eights Card Game"
         description="Play Crazy Eights online free with a Wild West twist. No login needed — pick a handle, create a room, share the code and deal the cards. Up to 6 players."
