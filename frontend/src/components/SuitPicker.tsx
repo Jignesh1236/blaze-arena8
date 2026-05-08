@@ -2,8 +2,8 @@ import { PLAYABLE_SUITS, SUIT_HEX, SUIT_SYMBOL, type Suit } from "@/lib/game";
 
 export function SuitPicker({ onPick, onCancel }: { onPick: (s: Suit) => void; onCancel: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-card border border-border rounded-2xl p-6 max-w-xs w-full shadow-card">
+    <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4 pb-32">
+      <div className="bg-card/95 border-2 border-amber-200/20 rounded-2xl p-6 max-w-xs w-full shadow-2xl relative animate-in zoom-in-95 duration-200">
         <h3 className="font-display text-xl text-center mb-4 text-amber-200">Choose a Suit</h3>
         <div className="grid grid-cols-2 gap-3">
           {PLAYABLE_SUITS.map((s) => (

@@ -19,9 +19,10 @@ import { PlayerSeat } from "@/components/PlayerSeat";
 import { SuitPicker } from "@/components/SuitPicker";
 
 import { Seo } from "@/components/Seo";
-import { TableArrowIcon } from "@/components/Icons";
+import { TableArrowIcon, ChatIcon, GlobeIcon, SendIcon, EmojiIcon } from "@/components/Icons";
 import { useVoiceChat } from "@/hooks/useVoiceChat";
 import { VoicePanel } from "@/components/VoicePanel";
+import { SevenTVPicker, renderWithEmotes } from "@/components/SevenTVPicker";
 
 
 
@@ -95,6 +96,13 @@ export default function GamePage() {
 
   const [voteOverlay, setVoteOverlay] = useState<{ targetId: string; yesVotes: number; totalPlayers: number } | null>(null);
   const [kickNotification, setKickNotification] = useState<{ secondsLeft: number } | null>(null);
+
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMsgs, setChatMsgs] = useState<{ id: string; name: string; avatar: string; text: string; at: string }[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatUnread, setChatUnread] = useState(0);
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
@@ -206,6 +214,11 @@ export default function GamePage() {
 
     });
 
+    socket.on("chat:message", (msg: { id: string; name: string; avatar: string; text: string; at: string }) => {
+      setChatMsgs(prev => [...prev.slice(-49), msg]);
+      if (!chatOpen) setChatUnread(u => u + 1);
+    });
+
     socket.on("connect", joinRoom);
 
     if (socket.connected) joinRoom(); else socket.connect();
@@ -239,6 +252,7 @@ export default function GamePage() {
       socket.off("game:update", setGame);
 
       socket.off("player:moved");
+      socket.off("chat:message");
 
       socket.off("connect", joinRoom);
 
@@ -248,7 +262,26 @@ export default function GamePage() {
 
     };
 
-  }, [id, navigate, profile, game?.players, game?.spectators]);
+  }, [id, navigate, profile, game?.players, game?.spectators, chatOpen]);
+
+  useEffect(() => {
+    if (chatOpen) {
+      setChatUnread(0);
+      chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [chatOpen, chatMsgs]);
+
+  function sendChat() {
+    if (!chatInput.trim() || !id || !profile) return;
+    getSocket().emit("chat:send", {
+      gameId: id,
+      name: profile.name,
+      avatar: profile.avatar,
+      text: chatInput.trim()
+    });
+    setChatInput("");
+    setEmojiOpen(false);
+  }
 
 
 
@@ -1293,6 +1326,81 @@ export default function GamePage() {
 
 
       {pendingCard && <SuitPicker onPick={pickSuit} onCancel={() => setPendingCard(null)} />}
+
+      {/* ── Game Chat Floating Panel ── */}
+      <div className="fixed bottom-4 left-3 z-[200] flex flex-col items-start gap-2 max-w-[calc(100vw-24px)]">
+        {chatOpen && (
+          <div className="w-[calc(100vw-24px)] sm:w-80 flex flex-col rounded-2xl border border-amber-200/15 shadow-2xl"
+               style={{ background: "rgba(10,6,4,0.94)", backdropFilter: "blur(16px)", maxHeight: "60vh" }}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-amber-200/10 flex-shrink-0 rounded-t-2xl bg-amber-500/5">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                <span className="font-display text-xs text-amber-200 tracking-[0.15em] uppercase">Room Chat</span>
+              </div>
+              <button onClick={() => setChatOpen(false)} className="text-amber-200/40 hover:text-amber-200/80 text-2xl leading-none transition-colors">×</button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-3 py-4 space-y-4 no-scrollbar" style={{ minHeight: "150px" }}>
+              {chatMsgs.length === 0 && (
+                <div className="h-full flex flex-col items-center justify-center text-center px-6">
+                  <p className="text-[10px] font-display text-amber-200/20 tracking-widest uppercase">No messages yet</p>
+                </div>
+              )}
+              {chatMsgs.map((msg, i) => {
+                const isMe = profile?.name === msg.name;
+                return (
+                  <div key={msg.id} className={`flex gap-2.5 items-start ${isMe ? "flex-row-reverse" : "flex-row"}`}>
+                    <img src={avatarUrl(msg.avatar)} alt="avatar" className="w-7 h-7 rounded-full object-cover flex-shrink-0 border border-white/10 shadow-sm" />
+                    <div className={`flex flex-col ${isMe ? "items-end" : "items-start"} max-w-[80%]`}>
+                      {!isMe && <span className="text-[9px] font-display text-amber-200/50 mb-0.5 px-1">{msg.name}</span>}
+                      <div className={`px-2.5 py-1.5 rounded-2xl text-[11px] leading-relaxed shadow-sm border ${
+                        isMe 
+                          ? "bg-amber-500/20 text-amber-50 border-amber-500/20 rounded-tr-none" 
+                          : "bg-white/5 text-amber-100/90 border-white/5 rounded-tl-none"
+                      } break-words`}>
+                        {renderWithEmotes(msg.text)}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              <div ref={chatEndRef} />
+            </div>
+            <div className="relative">
+              {emojiOpen && (
+                <SevenTVPicker
+                  onSelect={tag => setChatInput(prev => prev + tag)}
+                  onClose={() => setEmojiOpen(false)}
+                />
+              )}
+            </div>
+            <form className="flex items-center gap-2 px-3 py-2 border-t border-amber-200/10 flex-shrink-0 rounded-b-2xl bg-black/20"
+                  onSubmit={e => { e.preventDefault(); sendChat(); }}>
+              <button type="button" onClick={() => setEmojiOpen(o => !o)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-amber-200/40 hover:text-amber-200/70 hover:bg-white/5 transition-all flex-shrink-0"
+                title="7TV Emotes">
+                <EmojiIcon size={18} color="#fbbf24" />
+              </button>
+              <input value={chatInput} onChange={e => setChatInput(e.target.value)} maxLength={200}
+                placeholder="Message..."
+                className="flex-1 bg-white/5 border border-amber-200/10 rounded-xl px-3 py-1.5 text-xs text-amber-50 placeholder-amber-200/20 outline-none focus:border-amber-500/40 transition-all font-sans" />
+              <button type="submit" disabled={!chatInput.trim()}
+                className="w-8 h-8 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-30 flex items-center justify-center flex-shrink-0 transition-all active:scale-95">
+                <SendIcon size={16} color="#fff" />
+              </button>
+            </form>
+          </div>
+        )}
+        <button onClick={() => setChatOpen(o => !o)}
+          className="relative w-11 h-11 rounded-full flex items-center justify-center border border-amber-200/20 shadow-xl transition-all hover:scale-105 active:scale-95"
+          style={{ background: chatOpen ? "rgba(251,191,36,0.18)" : "rgba(10,6,4,0.82)", backdropFilter: "blur(12px)" }}>
+          <ChatIcon size={20} color={chatOpen ? "#fbbf24" : "#fbbf2466"} />
+          {!chatOpen && chatUnread > 0 && (
+            <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-amber-500 border-2 border-black flex items-center justify-center text-[9px] font-bold text-white">
+              {chatUnread > 9 ? "9+" : chatUnread}
+            </div>
+          )}
+        </button>
+      </div>
 
       <div className="fixed bottom-4 right-4 z-[100]">
         <VoicePanel

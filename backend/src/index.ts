@@ -174,6 +174,15 @@ io.on("connection", (socket) => {
   socket.on("voice:speaking", ({ gameId, playerId, speaking }) => {
     socket.to(`game:${gameId}`).emit("voice:speaking", { playerId, speaking });
   });
+
+  // Game Chat Events
+  socket.on("chat:send", (data: { gameId: string; name: string; avatar: string; text: string }) => {
+    io.to(`game:${data.gameId}`).emit("chat:message", {
+      id: Math.random().toString(36).slice(2, 9),
+      ...data,
+      at: new Date().toISOString()
+    });
+  });
 });
 
 

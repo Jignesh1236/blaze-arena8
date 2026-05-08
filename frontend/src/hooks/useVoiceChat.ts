@@ -139,14 +139,23 @@ export function useVoiceChat(gameId: string, myPlayerId: string) {
       }
 
       console.log("Requesting mic permission...");
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          deviceId: deviceId ? { exact: deviceId } : undefined,
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
+      
+      // Try with modern constraints first, fallback to simple boolean if it fails
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            ...(deviceId ? { deviceId: { exact: deviceId } } : {})
+          },
+        });
+      } catch (err) {
+        console.warn("Advanced mic constraints failed, trying simple audio:true", err);
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      }
+
       console.log("Mic granted successfully");
       localStream.current = stream;
       enabledRef.current = true;

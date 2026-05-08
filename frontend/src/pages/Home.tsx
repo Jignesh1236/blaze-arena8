@@ -375,10 +375,10 @@ export default function HomePage() {
       </div>
 
       {/* Global chat floating panel */}
-      <div className="fixed bottom-4 right-3 z-[200] flex flex-col items-end gap-2">
+      <div className="fixed bottom-4 right-3 z-[200] flex flex-col items-end gap-2 max-w-[calc(100vw-24px)]">
         {chatOpen && (
-          <div className="w-80 sm:w-96 flex flex-col rounded-2xl border border-amber-200/15 shadow-2xl"
-               style={{ background: "rgba(10,6,4,0.94)", backdropFilter: "blur(16px)", maxHeight: "520px" }}>
+          <div className="w-[calc(100vw-24px)] sm:w-96 flex flex-col rounded-2xl border border-amber-200/15 shadow-2xl"
+               style={{ background: "rgba(10,6,4,0.94)", backdropFilter: "blur(16px)", maxHeight: "70vh" }}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-amber-200/10 flex-shrink-0 rounded-t-2xl bg-amber-500/5">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
@@ -386,7 +386,7 @@ export default function HomePage() {
               </div>
               <button onClick={() => setChatOpen(false)} className="text-amber-200/40 hover:text-amber-200/80 text-2xl leading-none transition-colors">×</button>
             </div>
-            <div className="flex-1 overflow-y-auto px-3 py-4 space-y-4 no-scrollbar" style={{ minHeight: "200px", maxHeight: "400px" }}>
+            <div className="flex-1 overflow-y-auto px-3 py-4 space-y-4 no-scrollbar" style={{ minHeight: "180px" }}>
               {chatMsgs.length === 0 && (
                 <div className="h-full flex flex-col items-center justify-center text-center px-6">
                   <div className="w-12 h-12 rounded-full bg-amber-500/10 flex items-center justify-center mb-3">
