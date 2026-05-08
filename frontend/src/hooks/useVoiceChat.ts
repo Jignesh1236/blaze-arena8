@@ -117,14 +117,28 @@ export function useVoiceChat(gameId: string, myPlayerId: string) {
     try {
       patch({ error: null });
 
+      // Check if secure context (MediaDevices require HTTPS or localhost)
+      if (typeof window !== "undefined" && !window.isSecureContext) {
+        throw new Error("Voice chat requires a secure connection (HTTPS). Local development on localhost is also supported.");
+      }
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Your browser does not support mic access or it is blocked.");
+      }
+
       // Check if permission was already denied
-      if (typeof navigator !== "undefined" && navigator.permissions) {
-        const status = await navigator.permissions.query({ name: "microphone" as PermissionName });
-        if (status.state === "denied") {
-          throw new Error("Mic access is blocked in your browser settings. Please enable it to join voice chat.");
+      if (navigator.permissions) {
+        try {
+          const status = await navigator.permissions.query({ name: "microphone" as PermissionName });
+          if (status.state === "denied") {
+            throw new Error("Mic access is blocked in your browser settings. Please enable it to join voice chat.");
+          }
+        } catch (e) {
+          console.warn("Permissions API check failed, proceeding to getUserMedia", e);
         }
       }
 
+      console.log("Requesting mic permission...");
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           deviceId: deviceId ? { exact: deviceId } : undefined,
@@ -133,6 +147,7 @@ export function useVoiceChat(gameId: string, myPlayerId: string) {
           autoGainControl: true,
         },
       });
+      console.log("Mic granted successfully");
       localStream.current = stream;
       enabledRef.current = true;
 
