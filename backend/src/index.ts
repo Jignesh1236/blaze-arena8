@@ -221,5 +221,4 @@ gameEmitter.on("game:update", (g: GameRow) => {
       }
     }
   }, 10000);
-});
 
