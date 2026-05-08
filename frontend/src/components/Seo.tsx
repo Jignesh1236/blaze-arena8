@@ -1,6 +1,6 @@
 import { Helmet } from "react-helmet-async";
 
-const SITE = import.meta.env.VITE_SITE_URL || "https://blazing8s.com";
+const SITE = import.meta.env.VITE_SITE_URL || (typeof window !== "undefined" ? window.location.origin : "https://blazing8s.com");
 const OG_IMAGE = `${SITE}/og-image.png`;
 
 interface Props {
@@ -35,13 +35,22 @@ export function Seo({ title, description, path = "/", keywords, noIndex }: Props
       <meta property="og:image:height" content="630" />
       <meta property="og:image:alt" content="Blazing 8s — Wild West Multiplayer Card Game" />
       <meta property="og:locale" content="en_US" />
+      <meta property="fb:app_id" content="your_fb_app_id_if_any" />
 
       <meta name="twitter:card" content="summary_large_image" />
       <meta name="twitter:site" content="@blazing8s" />
+      <meta name="twitter:creator" content="@blazing8s" />
       <meta name="twitter:title" content={title} />
       <meta name="twitter:description" content={description} />
       <meta name="twitter:image" content={OG_IMAGE} />
       <meta name="twitter:image:alt" content="Blazing 8s — Wild West Multiplayer Card Game" />
+
+      <meta name="apple-mobile-web-app-capable" content="yes" />
+      <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+      <meta name="apple-mobile-web-app-title" content="Blazing 8s" />
+      
+      <link rel="icon" href="/favicon.svg" />
+      <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     </Helmet>
   );
 }
