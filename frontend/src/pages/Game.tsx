@@ -11,6 +11,8 @@ import { Seo } from "@/components/Seo";
 import { VoicePanel } from "@/components/VoicePanel";
 import { useVoiceChat } from "@/hooks/useVoiceChat";
 import { avatarUrl } from "@/lib/avatar";
+import { FlameIcon, CrownIcon, EyeIcon, LeaveIcon, ChatIcon, EmojiIcon, SendIcon, CopyIcon, CowboyIcon, SettingsIcon, SwitchIcon } from "@/components/Icons";
+import { SevenTVPicker, renderWithEmotes } from "@/components/SevenTVPicker";
 
 interface ChatMsg {
   id: string;
@@ -60,6 +62,7 @@ export default function GamePage() {
   const [chatOpen, setChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [chatUnread, setChatUnread] = useState(0);
+  const [chatEmojiOpen, setChatEmojiOpen] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLInputElement>(null);
 
@@ -457,7 +460,10 @@ export default function GamePage() {
       {switchOverlay && (
         <div key={switchOverlay.key} className="fixed z-[300] pointer-events-none" style={{ left: "50%", top: "50%", animation: "switch-banner 1.8s ease forwards" }}>
           <div className="bg-purple-900/95 backdrop-blur-md border-4 border-purple-400 rounded-2xl px-5 py-4 shadow-2xl text-center min-w-[200px]">
-            <div className="font-display text-xl sm:text-2xl text-purple-200 tracking-wider mb-2">🔄 SWITCHEROO!</div>
+            <div className="font-display text-xl sm:text-2xl text-purple-200 tracking-wider mb-2 flex items-center justify-center gap-2">
+              <SwitchIcon size={24} color="#c084fc" />
+              SWITCHEROO!
+            </div>
             <div className="flex items-center justify-center gap-3">
               <div className="flex flex-col items-center">
                 <img src={avatarUrl(switchOverlay.fromAvatar)} alt="from" className="w-10 h-10 rounded-full object-cover border-2 border-purple-400/50" />
@@ -487,13 +493,19 @@ export default function GamePage() {
         <div className="flex items-center gap-1.5">
           <button
             onClick={async () => { if (youId) await api.leaveGame(game.id, youId); navigate("/"); }}
-            className="font-display h-8 px-2.5 text-[10px] sm:text-xs rounded-lg bg-destructive shadow-lg hover:opacity-90 transition-opacity uppercase tracking-tighter"
-          >← Leave</button>
+            className="font-display h-8 px-2.5 text-[10px] sm:text-xs rounded-lg bg-destructive shadow-lg hover:opacity-90 transition-opacity uppercase tracking-tighter flex items-center gap-1"
+          >
+            <LeaveIcon size={14} color="#fff" />
+            Leave
+          </button>
           {isPlayer && game.status === "playing" && (
             <button
               onClick={async () => { if (youId) await api.becomeSpectator(game.id, youId); }}
-              className="font-display h-8 px-2 text-[10px] rounded-lg bg-white/10 border border-white/10 hover:bg-white/20 transition-all uppercase tracking-tighter hidden sm:block"
-            >👀 Spectate</button>
+              className="font-display h-8 px-2 text-[10px] rounded-lg bg-white/10 border border-white/10 hover:bg-white/20 transition-all uppercase tracking-tighter hidden sm:flex items-center gap-1"
+            >
+              <EyeIcon size={14} color="#fbbf24" />
+              Spectate
+            </button>
           )}
         </div>
 
@@ -516,8 +528,8 @@ export default function GamePage() {
       </div>
 
       {isSpectator && (
-        <div className="bg-accent/20 backdrop-blur-sm border-b border-accent/40 text-center py-1.5 text-xs font-display relative z-20 flex-shrink-0">
-          👀 Watching — you'll join next round!
+        <div className="bg-accent/20 backdrop-blur-sm border-b border-accent/40 text-center py-1.5 text-xs font-display relative z-20 flex-shrink-0 flex items-center justify-center gap-1.5">
+          <EyeIcon size={14} color="#fbbf24" /> Watching — you'll join next round!
         </div>
       )}
 
@@ -733,19 +745,16 @@ export default function GamePage() {
 
       {/* ── Chat panel ── */}
       <div className="fixed bottom-4 right-3 z-[250] flex flex-col items-end gap-2">
-        {/* Chat window */}
         {chatOpen && (
           <div className="w-72 sm:w-80 flex flex-col rounded-2xl overflow-hidden border border-amber-200/15 shadow-2xl"
                style={{ background: "rgba(10,6,4,0.94)", backdropFilter: "blur(16px)", maxHeight: "340px" }}>
-            {/* Header */}
             <div className="flex items-center justify-between px-3 py-2 border-b border-amber-200/10 flex-shrink-0">
               <div className="flex items-center gap-1.5">
-                <span className="text-base">💬</span>
+                <ChatIcon size={15} color="#fbbf24" />
                 <span className="font-display text-xs text-amber-200/80 tracking-wide">SALOON CHAT</span>
               </div>
               <button onClick={() => setChatOpen(false)} className="text-amber-200/40 hover:text-amber-200/80 text-lg leading-none transition-colors">×</button>
             </div>
-            {/* Messages */}
             <div className="flex-1 overflow-y-auto px-2 py-2 space-y-1.5" style={{ minHeight: "160px", maxHeight: "240px" }}>
               {chatMsgs.length === 0 && (
                 <div className="text-center text-[10px] font-display text-amber-200/25 mt-6 tracking-widest">No messages yet…</div>
@@ -761,18 +770,33 @@ export default function GamePage() {
                         ? "bg-amber-500/80 text-white rounded-tr-sm"
                         : "bg-white/8 text-amber-100/90 rounded-tl-sm border border-white/5"
                     )}>
-                      {msg.text}
+                      {renderWithEmotes(msg.text)}
                     </div>
                   </div>
                 </div>
               ))}
               <div ref={chatEndRef} />
             </div>
-            {/* Input */}
+            <div className="relative">
+              {chatEmojiOpen && (
+                <SevenTVPicker
+                  onSelect={tag => { setChatInput(prev => prev + tag); chatInputRef.current?.focus(); }}
+                  onClose={() => setChatEmojiOpen(false)}
+                />
+              )}
+            </div>
             <form
               className="flex items-center gap-1.5 px-2 py-2 border-t border-amber-200/10 flex-shrink-0"
               onSubmit={e => { e.preventDefault(); sendChat(); }}
             >
+              <button
+                type="button"
+                onClick={() => setChatEmojiOpen(o => !o)}
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-amber-200/40 hover:text-amber-200/70 hover:bg-white/5 transition-colors flex-shrink-0"
+                title="7TV Emotes"
+              >
+                <EmojiIcon size={16} color="#fbbf24" />
+              </button>
               <input
                 ref={chatInputRef}
                 value={chatInput}
@@ -784,19 +808,20 @@ export default function GamePage() {
               <button
                 type="submit"
                 disabled={!chatInput.trim()}
-                className="w-8 h-8 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-30 flex items-center justify-center transition-colors text-sm flex-shrink-0"
-              >▶</button>
+                className="w-8 h-8 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-30 flex items-center justify-center transition-colors flex-shrink-0"
+              >
+                <SendIcon size={16} color="#fff" />
+              </button>
             </form>
           </div>
         )}
 
-        {/* Toggle button */}
         <button
           onClick={() => setChatOpen(o => !o)}
           className="relative w-12 h-12 rounded-full flex items-center justify-center border border-amber-200/20 shadow-xl transition-all hover:scale-105 active:scale-95"
           style={{ background: chatOpen ? "rgba(251,191,36,0.18)" : "rgba(10,6,4,0.82)", backdropFilter: "blur(12px)" }}
         >
-          <span className="text-xl">{chatOpen ? "✕" : "💬"}</span>
+          <ChatIcon size={22} color={chatOpen ? "#fbbf24" : "#fbbf2466"} />
           {!chatOpen && chatUnread > 0 && (
             <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-amber-500 border-2 border-black flex items-center justify-center text-[9px] font-bold text-white">
               {chatUnread > 9 ? "9+" : chatUnread}
@@ -824,6 +849,7 @@ function Lobby({ game, youId, onLeave }: { game: GameRow; youId?: string; onLeav
   const [chatInput, setChatInput] = useState("");
   const [chatMsgs, setChatMsgs] = useState<LobbyMsg[]>([]);
   const [chatUnread, setChatUnread] = useState(0);
+  const [lobbyEmojiOpen, setLobbyEmojiOpen] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatOpenRef = useRef(chatOpen);
   useEffect(() => { chatOpenRef.current = chatOpen; }, [chatOpen]);
@@ -872,13 +898,19 @@ function Lobby({ game, youId, onLeave }: { game: GameRow; youId?: string; onLeav
       <div className="max-w-lg mx-auto p-4 sm:p-6">
         <div className="flex items-center justify-between mb-4">
           <Link to="/" className="text-sm opacity-70 font-display" onClick={onLeave}>← Leave</Link>
-          <span className="font-display text-lg">🔥 Blazing 8s</span>
+          <span className="font-display text-lg flex items-center gap-1.5">
+            <FlameIcon size={22} />
+            Blazing 8s
+          </span>
         </div>
         <div className="bg-card/90 backdrop-blur border border-border rounded-2xl p-5 sm:p-8 shadow-card text-center">
           <p className="opacity-70 text-xs font-display tracking-widest uppercase">Share code with your posse</p>
-          <button onClick={copy} className="mt-2 inline-flex items-center gap-3">
+          <button onClick={copy} className="mt-2 inline-flex items-center gap-3 group">
             <span className="font-display text-5xl sm:text-7xl tracking-[0.2em]" style={{ color: "oklch(0.78 0.16 70)" }}>{game.code}</span>
-            <span className="text-[10px] bg-black/40 px-2 py-1 rounded font-display">{copied ? "Copied!" : "Copy"}</span>
+            <span className="text-[10px] bg-black/40 px-2 py-1 rounded font-display flex items-center gap-1 group-hover:bg-amber-500/20 transition-colors">
+              <CopyIcon size={12} color="#fbbf24" />
+              {copied ? "Copied!" : "Copy"}
+            </span>
           </button>
           <div className="mt-6">
             <h3 className="font-display text-base mb-3 opacity-70">Players ({game.players.length}/6)</h3>
@@ -888,7 +920,11 @@ function Lobby({ game, youId, onLeave }: { game: GameRow; youId?: string; onLeav
                   <img src={avatarUrl(p.avatar)} alt={p.name} className="w-9 h-9 rounded-full object-cover flex-shrink-0 border border-amber-400/20" />
                   <div className="text-left min-w-0">
                     <div className="font-display text-xs truncate">{p.name}</div>
-                    {p.id === game.host_id && <div className="text-[9px] opacity-50">👑 Host</div>}
+                    {p.id === game.host_id && (
+                      <div className="text-[9px] opacity-70 flex items-center gap-0.5 text-amber-400">
+                        <CrownIcon size={10} color="#fbbf24" /> Host
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -897,11 +933,15 @@ function Lobby({ game, youId, onLeave }: { game: GameRow; youId?: string; onLeav
           {error && <p className="mt-3 text-xs font-display" style={{ color: "oklch(0.7 0.2 25)" }}>{error}</p>}
           {isHost ? (
             <button onClick={start} disabled={busy || game.players.length < 2}
-              className="mt-5 w-full bg-sunset font-display h-13 text-base rounded-xl shadow-glow hover:scale-[1.02] active:scale-[0.98] transition-transform disabled:opacity-50 py-3">
-              {busy ? "Dealing…" : game.players.length < 2 ? "Need 2+ players" : "START GAME →"}
+              className="mt-5 w-full bg-sunset font-display h-13 text-base rounded-xl shadow-glow hover:scale-[1.02] active:scale-[0.98] transition-transform disabled:opacity-50 py-3 flex items-center justify-center gap-2">
+              <CowboyIcon size={22} color="#fff" />
+              {busy ? "Dealing…" : game.players.length < 2 ? "Need 2+ players" : "START GAME"}
             </button>
           ) : (
-            <p className="mt-5 opacity-50 font-display text-sm">Waitin' for the host…</p>
+            <p className="mt-5 opacity-50 font-display text-sm flex items-center justify-center gap-1.5">
+              <SettingsIcon size={16} color="#fbbf2450" />
+              Waitin' for the host…
+            </p>
           )}
         </div>
       </div>
@@ -927,7 +967,7 @@ function Lobby({ game, youId, onLeave }: { game: GameRow; youId?: string; onLeav
                style={{ background: "rgba(10,6,4,0.94)", backdropFilter: "blur(16px)", maxHeight: "340px" }}>
             <div className="flex items-center justify-between px-3 py-2 border-b border-amber-200/10 flex-shrink-0">
               <div className="flex items-center gap-1.5">
-                <span className="text-base">💬</span>
+                <ChatIcon size={15} color="#fbbf24" />
                 <span className="font-display text-xs text-amber-200/80 tracking-wide">LOBBY CHAT</span>
               </div>
               <button onClick={() => setChatOpen(false)} className="text-amber-200/40 hover:text-amber-200/80 text-lg leading-none">×</button>
@@ -943,27 +983,42 @@ function Lobby({ game, youId, onLeave }: { game: GameRow; youId?: string; onLeav
                     <span className="text-[9px] font-display opacity-40 mb-0.5 px-1">{msg.playerId === youId ? "You" : msg.name}</span>
                     <div className={cn("px-2.5 py-1.5 rounded-2xl text-xs leading-snug break-words",
                       msg.playerId === youId ? "bg-amber-500/80 text-white rounded-tr-sm" : "bg-white/8 text-amber-100/90 rounded-tl-sm border border-white/5")}>
-                      {msg.text}
+                      {renderWithEmotes(msg.text)}
                     </div>
                   </div>
                 </div>
               ))}
               <div ref={chatEndRef} />
             </div>
+            <div className="relative">
+              {lobbyEmojiOpen && (
+                <SevenTVPicker
+                  onSelect={tag => setChatInput(prev => prev + tag)}
+                  onClose={() => setLobbyEmojiOpen(false)}
+                />
+              )}
+            </div>
             <form className="flex items-center gap-1.5 px-2 py-2 border-t border-amber-200/10 flex-shrink-0"
                   onSubmit={e => { e.preventDefault(); sendChat(); }}>
+              <button type="button" onClick={() => setLobbyEmojiOpen(o => !o)}
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-amber-200/40 hover:text-amber-200/70 hover:bg-white/5 transition-colors flex-shrink-0"
+                title="7TV Emotes">
+                <EmojiIcon size={16} color="#fbbf24" />
+              </button>
               <input value={chatInput} onChange={e => setChatInput(e.target.value)} maxLength={200}
                 placeholder="Type a message…"
                 className="flex-1 bg-white/6 border border-amber-200/10 rounded-xl px-3 py-1.5 text-xs text-amber-100 placeholder-amber-200/25 outline-none focus:border-amber-400/30 font-sans" />
               <button type="submit" disabled={!chatInput.trim()}
-                className="w-8 h-8 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-30 flex items-center justify-center text-sm flex-shrink-0">▶</button>
+                className="w-8 h-8 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-30 flex items-center justify-center flex-shrink-0">
+                <SendIcon size={16} color="#fff" />
+              </button>
             </form>
           </div>
         )}
         <button onClick={() => setChatOpen(o => !o)}
           className="relative w-12 h-12 rounded-full flex items-center justify-center border border-amber-200/20 shadow-xl transition-all hover:scale-105 active:scale-95"
           style={{ background: chatOpen ? "rgba(251,191,36,0.18)" : "rgba(10,6,4,0.82)", backdropFilter: "blur(12px)" }}>
-          <span className="text-xl">{chatOpen ? "✕" : "💬"}</span>
+          <ChatIcon size={22} color={chatOpen ? "#fbbf24" : "#fbbf2466"} />
           {!chatOpen && chatUnread > 0 && (
             <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-amber-500 border-2 border-black flex items-center justify-center text-[9px] font-bold text-white">
               {chatUnread > 9 ? "9+" : chatUnread}

@@ -6,7 +6,12 @@ const ICE_CONFIG: RTCConfiguration = {
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
     { urls: "stun:stun2.l.google.com:19302" },
+    { urls: "stun:openrelay.metered.ca:80" },
+    { urls: "turn:openrelay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
+    { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
+    { urls: "turns:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
   ],
+  iceCandidatePoolSize: 10,
 };
 
 interface PeerConn {
@@ -215,6 +220,9 @@ export function useVoiceChat(gameId: string, myPlayerId: string) {
     }
 
     function onPeerJoined({ playerId, socketId }: { playerId: string; socketId: string }) {
+      // Do NOT create an offer here — the joiner already sends offers via onRoomPeers.
+      // Creating offers from both sides causes signaling glare (state mismatch).
+      // Just pre-register the peer so we're ready to handle their incoming offer.
       if (playerId === myPlayerId || !enabledRef.current) return;
       getPeer(playerId, socketId);
     }

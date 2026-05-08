@@ -27,7 +27,7 @@ games.get("/:id", async (c) => {
 const playerSchema = z.object({
   id: z.string().min(1).max(64),
   name: z.string().min(1).max(24),
-  avatar: z.string().min(1).max(8),
+  avatar: z.string().min(1).max(2000),
 });
 
 async function parseJson<T extends z.ZodTypeAny>(c: any, schema: T): Promise<z.infer<T>> {

@@ -6,6 +6,12 @@ import { getSocket } from "@/lib/socket";
 import { Seo } from "@/components/Seo";
 import { PlayingCard } from "@/components/PlayingCard";
 import { AVATAR_SEEDS, avatarUrl } from "@/lib/avatar";
+import { DiceBearCustomizer, type AvatarConfig } from "@/components/DiceBearCustomizer";
+import { SevenTVPicker, renderWithEmotes } from "@/components/SevenTVPicker";
+import {
+  FlameIcon, ChatIcon, GlobeIcon, SendIcon, EmojiIcon,
+  LightningIcon, CardsIcon, HandshakeIcon, CowboyIcon, DesertIcon,
+} from "@/components/Icons";
 
 interface GlobalMsg {
   id: string;
@@ -19,7 +25,7 @@ function AdBanner({ adKey, width, height }: { adKey: string; width: number; heig
   useEffect(() => {
     if (!ref.current) return;
     ref.current.innerHTML = "";
-    (window as Record<string, unknown>)["atOptions"] = { key: adKey, format: "iframe", height, width, params: {} };
+    (window as unknown as Record<string, unknown>)["atOptions"] = { key: adKey, format: "iframe", height, width, params: {} };
     const s = document.createElement("script");
     s.src = `https://www.highperformanceformat.com/${adKey}/invoke.js`;
     s.async = true;
@@ -28,44 +34,46 @@ function AdBanner({ adKey, width, height }: { adKey: string; width: number; heig
   return <div ref={ref} style={{ width, height, overflow: "hidden" }} />;
 }
 
+const DEFAULT_CONFIG: AvatarConfig = { seed: AVATAR_SEEDS[0] };
+
 export default function HomePage() {
   const { profile, loading, save, clear } = useGuest();
   const navigate = useNavigate();
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [avatar, setAvatar] = useState(AVATAR_SEEDS[0]);
+  const [avatarConfig, setAvatarConfig] = useState<AvatarConfig>(DEFAULT_CONFIG);
+  const [customizerOpen, setCustomizerOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [games, setGames] = useState<PublicGame[]>([]);
 
-  // Global chat state
   const [chatOpen, setChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [chatMsgs, setChatMsgs] = useState<GlobalMsg[]>([]);
   const [chatUnread, setChatUnread] = useState(0);
+  const [emojiOpen, setEmojiOpen] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatOpenRef = useRef(chatOpen);
   useEffect(() => { chatOpenRef.current = chatOpen; }, [chatOpen]);
 
+  function configToSeed(cfg: AvatarConfig): string {
+    const keys = Object.keys(cfg).filter(k => cfg[k as keyof AvatarConfig]);
+    if (keys.length === 1 && keys[0] === "seed") return cfg.seed ?? AVATAR_SEEDS[0];
+    return JSON.stringify(cfg);
+  }
+
   useEffect(() => {
     const socket = getSocket();
-
     function onLobbyUpdate(data: PublicGame[]) { setGames(data); }
     function onGlobalMsg(msg: GlobalMsg) {
       setChatMsgs(prev => [...prev.slice(-99), msg]);
       if (!chatOpenRef.current) setChatUnread(n => n + 1);
     }
-
     socket.on("lobby:update", onLobbyUpdate);
     socket.on("global:msg", onGlobalMsg);
     socket.on("connect", () => socket.emit("join:lobby"));
-
-    if (socket.connected) {
-      socket.emit("join:lobby");
-    } else {
-      socket.connect();
-    }
-
+    if (socket.connected) { socket.emit("join:lobby"); } else { socket.connect(); }
     return () => {
       socket.emit("leave:lobby");
       socket.off("lobby:update", onLobbyUpdate);
@@ -95,7 +103,7 @@ export default function HomePage() {
     if (profile) return profile;
     const t = name.trim();
     if (!t) { setError("Pick a display name first"); return null; }
-    return save(t, avatar);
+    return save(t, configToSeed(avatarConfig));
   }
 
   async function handleCreate() {
@@ -124,6 +132,7 @@ export default function HomePage() {
   }
 
   const activeGames = games.filter((g) => g.status === "lobby" || g.status === "playing");
+  const previewUrl = avatarUrl(configToSeed(avatarConfig));
 
   return (
     <main className="min-h-screen relative overflow-hidden bg-table">
@@ -136,7 +145,8 @@ export default function HomePage() {
       <div className="relative z-10 max-w-5xl mx-auto px-4 py-10 sm:py-16">
         <header className="flex items-center justify-between mb-12">
           <div className="flex items-center gap-2 font-display text-2xl">
-            <span className="text-3xl">🔥</span><span>Blazing 8s</span>
+            <FlameIcon size={30} />
+            <span>Blazing 8s</span>
           </div>
           {profile && (
             <div className="flex items-center gap-3">
@@ -148,7 +158,6 @@ export default function HomePage() {
           )}
         </header>
 
-        {/* Top banner ad (468x60) */}
         <div className="flex justify-center mb-8">
           <AdBanner adKey="0ceec5a7bf06f1913d15695622a746b7" width={468} height={60} />
         </div>
@@ -176,21 +185,52 @@ export default function HomePage() {
                 <input value={name} onChange={(e) => setName(e.target.value)} maxLength={24}
                   className="w-full px-3 py-2 rounded-lg bg-black/30 border border-border outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
                   placeholder="Lone Ranger" />
-                <label className="block text-sm font-display mt-3">Choose your look</label>
-                <div className="grid grid-cols-6 gap-2">
-                  {AVATAR_SEEDS.map((seed) => (
-                    <button key={seed} type="button" onClick={() => setAvatar(seed)}
-                      className={`aspect-square rounded-xl border-2 overflow-hidden transition-all ${avatar === seed ? "border-[var(--color-accent)] scale-110" : "border-border hover:border-amber-400/40"}`}>
-                      <img src={avatarUrl(seed)} alt={seed} className="w-full h-full object-cover" loading="lazy" />
-                    </button>
-                  ))}
+
+                <div className="flex items-center justify-between mt-3">
+                  <label className="block text-sm font-display">Choose your look</label>
+                  <button
+                    type="button"
+                    onClick={() => setCustomizerOpen(o => !o)}
+                    className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg bg-amber-500/20 border border-amber-400/30 text-amber-300 hover:bg-amber-500/30 transition-colors font-display"
+                  >
+                    ✦ Customize
+                  </button>
                 </div>
+
+                {customizerOpen ? (
+                  <DiceBearCustomizer
+                    value={avatarConfig}
+                    onChange={cfg => setAvatarConfig(cfg)}
+                    onClose={() => setCustomizerOpen(false)}
+                  />
+                ) : (
+                  <>
+                    <div className="grid grid-cols-6 gap-2">
+                      {AVATAR_SEEDS.map((seed) => (
+                        <button key={seed} type="button"
+                          onClick={() => { setAvatar(seed); setAvatarConfig({ seed }); }}
+                          className={`aspect-square rounded-xl border-2 overflow-hidden transition-all ${avatar === seed && !customizerOpen ? "border-[var(--color-accent)] scale-110" : "border-border hover:border-amber-400/40"}`}>
+                          <img src={avatarUrl(seed)} alt={seed} className="w-full h-full object-cover" loading="lazy" />
+                        </button>
+                      ))}
+                    </div>
+                    {Object.keys(avatarConfig).some(k => k !== "seed") && (
+                      <div className="flex items-center gap-2 mt-1">
+                        <img src={previewUrl} alt="custom" className="w-9 h-9 rounded-full border-2 border-amber-400/50 object-cover" />
+                        <span className="text-[10px] font-display text-amber-300">Custom avatar selected</span>
+                        <button type="button" onClick={() => { setAvatarConfig(DEFAULT_CONFIG); setAvatar(AVATAR_SEEDS[0]); }}
+                          className="text-[10px] text-red-400/70 hover:text-red-400">Reset</button>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             )}
 
             <button onClick={handleCreate} disabled={busy || loading}
-              className="w-full h-14 text-lg font-display bg-sunset border-2 border-amber-200/30 rounded-lg hover:opacity-90 shadow-glow disabled:opacity-60">
-              🤠 Start a Showdown
+              className="w-full h-14 text-lg font-display bg-sunset border-2 border-amber-200/30 rounded-lg hover:opacity-90 shadow-glow disabled:opacity-60 flex items-center justify-center gap-2">
+              <CowboyIcon size={26} color="#fff" />
+              Start a Showdown
             </button>
             <div className="my-4 flex items-center gap-3 text-sm" style={{ color: "oklch(0.75 0.04 70)" }}>
               <div className="flex-1 h-px bg-border" /><span>or join a room</span><div className="flex-1 h-px bg-border" />
@@ -204,11 +244,13 @@ export default function HomePage() {
             {error && <p className="mt-3 text-sm" style={{ color: "oklch(0.7 0.2 25)" }}>{error}</p>}
           </div>
 
-          {/* Active Rooms */}
           {activeGames.length > 0 && (
             <div className="mt-10 max-w-2xl mx-auto text-left">
               <h2 className="font-display text-2xl mb-4 text-center" style={{ color: "oklch(0.85 0.04 70)" }}>
-                🏜️ Active Rooms
+                <span className="inline-flex items-center gap-2">
+                  <DesertIcon size={28} color="#fbbf24" />
+                  Active Rooms
+                </span>
                 <span className="ml-2 inline-block bg-[var(--color-accent)]/20 border border-[var(--color-accent)]/40 text-[var(--color-accent)] font-sans text-sm px-2 py-0.5 rounded-full align-middle">LIVE</span>
               </h2>
               <div className="grid sm:grid-cols-2 gap-3">
@@ -239,15 +281,14 @@ export default function HomePage() {
             </div>
           )}
 
-          {/* Bottom banner ad (320x50) */}
           <div className="mt-10 flex justify-center">
             <AdBanner adKey="6faec0f0b766c85bc967985eb764e4e2" width={320} height={50} />
           </div>
 
           <div className="mt-12 grid sm:grid-cols-3 gap-4 text-left">
-            <Feature icon="⚡" title="Real-time" desc="Live updates the moment cards hit the table." />
-            <Feature icon="🎴" title="Classic rules" desc="Match suits & ranks. 8s are wild. Switcheroo swaps hands." />
-            <Feature icon="🤝" title="Up to 6 players" desc="Share a code, gather your posse, ride at dawn." />
+            <Feature Icon={LightningIcon} title="Real-time" desc="Live updates the moment cards hit the table." />
+            <Feature Icon={CardsIcon} title="Classic rules" desc="Match suits & ranks. 8s are wild. Switcheroo swaps hands." />
+            <Feature Icon={HandshakeIcon} title="Up to 6 players" desc="Share a code, gather your posse, ride at dawn." />
           </div>
 
           <div className="mt-10 text-center">
@@ -263,10 +304,10 @@ export default function HomePage() {
                style={{ background: "rgba(10,6,4,0.94)", backdropFilter: "blur(16px)", maxHeight: "340px" }}>
             <div className="flex items-center justify-between px-3 py-2 border-b border-amber-200/10 flex-shrink-0">
               <div className="flex items-center gap-1.5">
-                <span className="text-base">🌎</span>
+                <GlobeIcon size={15} color="#fbbf24" />
                 <span className="font-display text-xs text-amber-200/80 tracking-wide">GLOBAL CHAT</span>
               </div>
-              <button onClick={() => setChatOpen(false)} className="text-amber-200/40 hover:text-amber-200/80 text-lg leading-none">×</button>
+              <button onClick={() => setChatOpen(false)} className="text-amber-200/40 hover:text-amber-200/80 text-xl leading-none">×</button>
             </div>
             <div className="flex-1 overflow-y-auto px-2 py-2 space-y-1.5" style={{ minHeight: "160px", maxHeight: "240px" }}>
               {chatMsgs.length === 0 && (
@@ -278,27 +319,42 @@ export default function HomePage() {
                   <div className="flex flex-col items-start max-w-[80%]">
                     <span className="text-[9px] font-display opacity-40 mb-0.5 px-1">{msg.name}</span>
                     <div className="px-2.5 py-1.5 rounded-2xl rounded-tl-sm text-xs leading-snug bg-white/8 text-amber-100/90 border border-white/5 break-words">
-                      {msg.text}
+                      {renderWithEmotes(msg.text)}
                     </div>
                   </div>
                 </div>
               ))}
               <div ref={chatEndRef} />
             </div>
+            <div className="relative">
+              {emojiOpen && (
+                <SevenTVPicker
+                  onSelect={tag => setChatInput(prev => prev + tag)}
+                  onClose={() => setEmojiOpen(false)}
+                />
+              )}
+            </div>
             <form className="flex items-center gap-1.5 px-2 py-2 border-t border-amber-200/10 flex-shrink-0"
                   onSubmit={e => { e.preventDefault(); sendGlobalChat(); }}>
+              <button type="button" onClick={() => setEmojiOpen(o => !o)}
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-amber-200/40 hover:text-amber-200/70 hover:bg-white/5 transition-colors flex-shrink-0"
+                title="7TV Emotes">
+                <EmojiIcon size={16} color="#fbbf24" />
+              </button>
               <input value={chatInput} onChange={e => setChatInput(e.target.value)} maxLength={200}
                 placeholder="Say something…"
                 className="flex-1 bg-white/6 border border-amber-200/10 rounded-xl px-3 py-1.5 text-xs text-amber-100 placeholder-amber-200/25 outline-none focus:border-amber-400/30 font-sans" />
               <button type="submit" disabled={!chatInput.trim()}
-                className="w-8 h-8 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-30 flex items-center justify-center text-sm flex-shrink-0">▶</button>
+                className="w-8 h-8 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-30 flex items-center justify-center flex-shrink-0">
+                <SendIcon size={16} color="#fff" />
+              </button>
             </form>
           </div>
         )}
         <button onClick={() => setChatOpen(o => !o)}
           className="relative w-12 h-12 rounded-full flex items-center justify-center border border-amber-200/20 shadow-xl transition-all hover:scale-105 active:scale-95"
           style={{ background: chatOpen ? "rgba(251,191,36,0.18)" : "rgba(10,6,4,0.82)", backdropFilter: "blur(12px)" }}>
-          <span className="text-xl">{chatOpen ? "✕" : "🌎"}</span>
+          <GlobeIcon size={22} color={chatOpen ? "#fbbf24" : "#fbbf2466"} />
           {!chatOpen && chatUnread > 0 && (
             <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-amber-500 border-2 border-black flex items-center justify-center text-[9px] font-bold text-white">
               {chatUnread > 9 ? "9+" : chatUnread}
@@ -310,10 +366,12 @@ export default function HomePage() {
   );
 }
 
-function Feature({ icon, title, desc }: { icon: string; title: string; desc: string }) {
+function Feature({ Icon, title, desc }: { Icon: React.ComponentType<{ size?: number; color?: string }>; title: string; desc: string }) {
   return (
     <div className="bg-card/80 backdrop-blur border border-border rounded-xl p-4 shadow-card">
-      <div className="text-3xl mb-1">{icon}</div>
+      <div className="mb-2">
+        <Icon size={32} color="#fbbf24" />
+      </div>
       <div className="font-display text-lg">{title}</div>
       <p className="text-sm" style={{ color: "oklch(0.85 0.04 70)" }}>{desc}</p>
     </div>

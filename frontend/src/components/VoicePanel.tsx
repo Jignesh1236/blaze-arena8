@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { VoiceState } from "@/hooks/useVoiceChat";
 import { avatarUrl } from "@/lib/avatar";
+import { MicIcon, MicMutedIcon, SettingsIcon } from "@/components/Icons";
 
 interface Props {
   state: VoiceState;
@@ -29,13 +30,15 @@ export function VoicePanel({ state, players, myPlayerId, onEnable, onDisable, on
           {/* Header */}
           <div className="flex items-center justify-between px-3 py-2 border-b border-amber-200/10 flex-shrink-0">
             <div className="flex items-center gap-1.5">
-              <span className="text-base">🎙️</span>
+              <MicIcon size={15} color="#fbbf24" />
               <span className="font-display text-xs text-amber-200/80 tracking-wide">VOICE CHAT</span>
               {state.enabled && <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse ml-1" />}
             </div>
             <div className="flex items-center gap-1">
-              <button onClick={() => setSettingsOpen(o => !o)} className="text-amber-200/40 hover:text-amber-200/80 text-sm transition-colors px-1">⚙️</button>
-              <button onClick={() => setPanelOpen(false)} className="text-amber-200/40 hover:text-amber-200/80 text-lg leading-none transition-colors">×</button>
+              <button onClick={() => setSettingsOpen(o => !o)} className="text-amber-200/40 hover:text-amber-200/80 transition-colors px-1 flex items-center">
+                <SettingsIcon size={15} color="#fbbf2466" />
+              </button>
+              <button onClick={() => setPanelOpen(false)} className="text-amber-200/40 hover:text-amber-200/80 text-lg leading-none transition-colors ml-1">×</button>
             </div>
           </div>
 
@@ -43,8 +46,8 @@ export function VoicePanel({ state, players, myPlayerId, onEnable, onDisable, on
           {state.error && (
             <div className="mx-2 mt-2 px-3 py-2 rounded-xl bg-red-500/15 border border-red-400/20 text-[10px] text-red-300 font-display">
               {state.error.includes("Permission") || state.error.includes("denied") || state.error.includes("NotAllowed")
-                ? "🚫 Mic access denied. Allow microphone in browser settings."
-                : `⚠️ ${state.error}`}
+                ? "Mic access denied. Allow microphone in browser settings."
+                : `Error: ${state.error}`}
             </div>
           )}
 
@@ -80,13 +83,10 @@ export function VoicePanel({ state, players, myPlayerId, onEnable, onDisable, on
             <div className="flex items-center gap-2 px-2 py-1.5 rounded-xl bg-white/4">
               <img src={avatarUrl(playerMap[myPlayerId]?.avatar ?? "Felix")} alt="me" className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
               <span className="text-xs font-display text-amber-200/80 flex-1 truncate">{playerMap[myPlayerId]?.name ?? "You"}</span>
-              <span className="text-[10px] transition-all duration-200"
-                style={{
-                  color: state.muted ? "rgba(239,68,68,0.8)" : state.speaking[myPlayerId] ? "rgba(74,222,128,1)" : "rgba(255,255,255,0.3)",
-                  filter: state.speaking[myPlayerId] ? "drop-shadow(0 0 4px rgba(74,222,128,0.8))" : "none",
-                }}>
-                {state.muted ? "🔇" : "🎙️"}
-              </span>
+              {state.muted
+                ? <MicMutedIcon size={16} color="#ef4444" />
+                : <MicIcon size={16} color={state.speaking[myPlayerId] ? "#4ade80" : "#ffffff40"} />
+              }
             </div>
 
             {state.peers.map(pid => {
@@ -102,10 +102,7 @@ export function VoicePanel({ state, players, myPlayerId, onEnable, onDisable, on
                     className="w-7 h-7 rounded-full object-cover flex-shrink-0 transition-all duration-200"
                     style={{ filter: speaking ? "drop-shadow(0 0 4px rgba(74,222,128,0.6))" : "none" }} />
                   <span className="text-xs font-display text-amber-200/70 flex-1 truncate">{p.name}</span>
-                  <span className="text-[10px] transition-all duration-200"
-                    style={{ color: speaking ? "rgba(74,222,128,1)" : "rgba(255,255,255,0.25)" }}>
-                    🎙️
-                  </span>
+                  <MicIcon size={16} color={speaking ? "#4ade80" : "#ffffff30"} />
                 </div>
               );
             })}
@@ -123,7 +120,8 @@ export function VoicePanel({ state, players, myPlayerId, onEnable, onDisable, on
             {!state.enabled ? (
               <button onClick={onEnable}
                 className="flex-1 h-8 rounded-xl bg-green-500/80 hover:bg-green-400/90 text-white text-xs font-display tracking-wide transition-colors flex items-center justify-center gap-1.5">
-                🎙️ Join Voice
+                <MicIcon size={15} color="#fff" />
+                Join Voice
               </button>
             ) : (
               <>
@@ -134,7 +132,11 @@ export function VoicePanel({ state, players, myPlayerId, onEnable, onDisable, on
                     border: `1px solid ${state.muted ? "rgba(239,68,68,0.4)" : "rgba(74,222,128,0.3)"}`,
                     color: state.muted ? "rgba(239,68,68,0.9)" : "rgba(74,222,128,0.9)",
                   }}>
-                  {state.muted ? "🔇 Unmute" : "🎙️ Mute"}
+                  {state.muted
+                    ? <MicMutedIcon size={15} color="#ef4444" />
+                    : <MicIcon size={15} color="#4ade80" />
+                  }
+                  {state.muted ? "Unmute" : "Mute"}
                 </button>
                 <button onClick={onDisable}
                   className="h-8 px-3 rounded-xl bg-red-500/20 hover:bg-red-500/35 border border-red-400/30 text-red-300 text-xs font-display tracking-wide transition-colors">
@@ -158,7 +160,10 @@ export function VoicePanel({ state, players, myPlayerId, onEnable, onDisable, on
         }}
         title="Voice chat"
       >
-        <span className="text-xl">{state.enabled ? (state.muted ? "🔇" : "🎙️") : "🎙️"}</span>
+        {state.enabled && state.muted
+          ? <MicMutedIcon size={22} color="#ef4444" />
+          : <MicIcon size={22} color={state.enabled ? "#4ade80" : "#fbbf24"} />
+        }
         {state.enabled && !state.muted && <span className="absolute top-0 right-0 w-3 h-3 rounded-full bg-green-400 border-2 border-black" />}
         {state.enabled && state.muted && <span className="absolute top-0 right-0 w-3 h-3 rounded-full bg-red-400 border-2 border-black" />}
       </button>
