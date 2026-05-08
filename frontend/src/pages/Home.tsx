@@ -300,16 +300,16 @@ export default function HomePage() {
       {/* Global chat floating panel */}
       <div className="fixed bottom-4 right-3 z-[200] flex flex-col items-end gap-2">
         {chatOpen && (
-          <div className="w-72 sm:w-80 flex flex-col rounded-2xl overflow-hidden border border-amber-200/15 shadow-2xl"
-               style={{ background: "rgba(10,6,4,0.94)", backdropFilter: "blur(16px)", maxHeight: "340px" }}>
-            <div className="flex items-center justify-between px-3 py-2 border-b border-amber-200/10 flex-shrink-0">
+          <div className="w-80 sm:w-96 flex flex-col rounded-2xl border border-amber-200/15 shadow-2xl"
+               style={{ background: "rgba(10,6,4,0.94)", backdropFilter: "blur(16px)", maxHeight: "520px" }}>
+            <div className="flex items-center justify-between px-3 py-2 border-b border-amber-200/10 flex-shrink-0 rounded-t-2xl">
               <div className="flex items-center gap-1.5">
                 <GlobeIcon size={15} color="#fbbf24" />
                 <span className="font-display text-xs text-amber-200/80 tracking-wide">GLOBAL CHAT</span>
               </div>
               <button onClick={() => setChatOpen(false)} className="text-amber-200/40 hover:text-amber-200/80 text-xl leading-none">×</button>
             </div>
-            <div className="flex-1 overflow-y-auto px-2 py-2 space-y-1.5" style={{ minHeight: "160px", maxHeight: "240px" }}>
+            <div className="flex-1 overflow-y-auto px-2 py-2 space-y-1.5" style={{ minHeight: "180px", maxHeight: "380px" }}>
               {chatMsgs.length === 0 && (
                 <div className="text-center text-[10px] font-display text-amber-200/25 mt-6 tracking-widest">No messages yet…</div>
               )}
@@ -334,7 +334,7 @@ export default function HomePage() {
                 />
               )}
             </div>
-            <form className="flex items-center gap-1.5 px-2 py-2 border-t border-amber-200/10 flex-shrink-0"
+            <form className="flex items-center gap-1.5 px-2 py-2 border-t border-amber-200/10 flex-shrink-0 rounded-b-2xl"
                   onSubmit={e => { e.preventDefault(); sendGlobalChat(); }}>
               <button type="button" onClick={() => setEmojiOpen(o => !o)}
                 className="w-7 h-7 rounded-lg flex items-center justify-center text-amber-200/40 hover:text-amber-200/70 hover:bg-white/5 transition-colors flex-shrink-0"

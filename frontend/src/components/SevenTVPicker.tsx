@@ -112,7 +112,7 @@ export function SevenTVPicker({ onSelect, onClose }: Props) {
   return (
     <div
       ref={containerRef}
-      className="absolute bottom-full right-0 mb-2 w-72 rounded-2xl border border-amber-200/15 shadow-2xl overflow-hidden z-50"
+      className="absolute bottom-full right-0 mb-2 w-80 sm:w-96 rounded-2xl border border-amber-200/15 shadow-2xl overflow-hidden z-50"
       style={{ background: "rgba(10,6,4,0.97)", backdropFilter: "blur(16px)" }}
     >
       <div className="flex items-center justify-between px-3 py-2 border-b border-amber-200/10">
@@ -133,12 +133,12 @@ export function SevenTVPicker({ onSelect, onClose }: Props) {
         />
       </div>
 
-      <div className="p-2 grid grid-cols-5 gap-1 overflow-y-auto" style={{ maxHeight: "200px" }}>
+      <div className="p-2 grid grid-cols-6 sm:grid-cols-8 gap-1 overflow-y-auto" style={{ maxHeight: "280px" }}>
         {loading && (
-          <div className="col-span-5 text-center py-4 text-[10px] font-display text-amber-200/30">Loading…</div>
+          <div className="col-span-6 sm:col-span-8 text-center py-4 text-[10px] font-display text-amber-200/30">Loading…</div>
         )}
         {!loading && emotes.length === 0 && (
-          <div className="col-span-5 text-center py-4 text-[10px] font-display text-amber-200/30">No emotes found</div>
+          <div className="col-span-6 sm:col-span-8 text-center py-4 text-[10px] font-display text-amber-200/30">No emotes found</div>
         )}
         {emotes.map(e => (
           <button

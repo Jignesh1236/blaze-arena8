@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 
 // DiceBear adventurer style options
 const HAIR_OPTIONS = [
@@ -90,8 +90,107 @@ interface Props {
 
 type Tab = "hair" | "eyes" | "mouth" | "colors";
 
+const AD_URL = "https://sadpicture.com/dIm/FRz.duG/NyveZWGvUS/Le/mX9cu/ZFUdlfkpP/TncMwdMCjzcc4JO/TiMLtWNIz/AOyiNzzvg/5AN/yyZosGaiWc1/psd/Df0axy";
+
+function AdPopupModal({ onComplete, onClose }: { onComplete: () => void; onClose?: () => void }) {
+  const [secondsLeft, setSecondsLeft] = useState(5);
+  const [canSkip, setCanSkip] = useState(false);
+  const [showIframe, setShowIframe] = useState(false);
+
+  useEffect(() => {
+    // Small delay to show popup first, then load iframe
+    const loadTimer = setTimeout(() => setShowIframe(true), 300);
+    
+    const timer = setInterval(() => {
+      setSecondsLeft((prev) => {
+        if (prev <= 1) {
+          setCanSkip(true);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      clearTimeout(loadTimer);
+      clearInterval(timer);
+    };
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-[300] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.85)" }}>
+      <div className="w-full max-w-2xl rounded-2xl border border-amber-200/20 shadow-2xl overflow-hidden" style={{ background: "rgba(10,6,4,0.98)" }}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-amber-200/10 bg-black/40">
+          <div className="flex items-center gap-2">
+            <span className="text-amber-400 text-xs font-display tracking-wider">AD</span>
+            <span className="font-display text-sm text-amber-200/80">Watch to Unlock Avatar</span>
+          </div>
+          <button 
+            onClick={onClose} 
+            className="text-amber-200/40 hover:text-amber-200/80 text-xl leading-none"
+            title="Close"
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Ad Iframe Container */}
+        <div className="relative w-full h-64 sm:h-80 md:h-96 bg-black/60">
+          {showIframe && (
+            <iframe
+              src={AD_URL}
+              className="w-full h-full border-0"
+              sandbox="allow-scripts allow-same-origin allow-popups"
+              title="Advertisement"
+            />
+          )}
+          {!showIframe && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="flex flex-col items-center gap-2">
+                <div className="w-10 h-10 border-2 border-amber-400/30 border-t-amber-400 rounded-full animate-spin" />
+                <span className="text-xs text-amber-200/40 font-display">Loading ad…</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer with timer / skip button */}
+        <div className="flex items-center justify-between px-4 py-3 border-t border-amber-200/10 bg-black/40">
+          <div className="flex items-center gap-2">
+            <div className="h-1.5 w-24 bg-white/10 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-amber-400 rounded-full transition-all"
+                style={{ width: `${((5 - secondsLeft) / 5) * 100}%` }}
+              />
+            </div>
+            <span className="text-[10px] text-amber-200/50 font-display">
+              {canSkip ? "Completed!" : `Wait ${secondsLeft}s…`}
+            </span>
+          </div>
+          
+          <button
+            onClick={onComplete}
+            disabled={!canSkip}
+            className={`px-4 py-2 rounded-xl font-display text-sm transition-all ${
+              canSkip 
+                ? "bg-amber-500 hover:bg-amber-400 text-white" 
+                : "bg-white/10 text-amber-200/30 cursor-not-allowed"
+            }`}
+          >
+            {canSkip ? "Continue →" : "Skip Locked"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function DiceBearCustomizer({ value, onChange, onClose }: Props) {
   const [tab, setTab] = useState<Tab>("hair");
+  const [adWatched, setAdWatched] = useState(() => {
+    try { return localStorage.getItem("blaze_avatar_ad") === "watched"; } catch { return false; }
+  });
   const [hairIdx, setHairIdx] = useState(() => HAIR_OPTIONS.indexOf(value.hair ?? "") || 0);
   const [eyeIdx, setEyeIdx] = useState(() => EYE_OPTIONS.indexOf(value.eyes ?? "") || 0);
   const [mouthIdx, setMouthIdx] = useState(() => MOUTH_OPTIONS.indexOf(value.mouth ?? "") || 0);
@@ -144,6 +243,18 @@ export function DiceBearCustomizer({ value, onChange, onClose }: Props) {
         <button onClick={onClose} className="text-amber-200/40 hover:text-amber-200/80 text-xl leading-none">×</button>
       </div>
 
+      {!adWatched && (
+        <AdPopupModal 
+          onComplete={() => {
+            try { localStorage.setItem("blaze_avatar_ad", "watched"); } catch { /* ignore */ }
+            setAdWatched(true);
+          }}
+          onClose={onClose}
+        />
+      )}
+
+      {adWatched && (
+      <>
       {/* Preview */}
       <div className="flex items-center justify-center py-4 gap-4">
         <img
@@ -270,6 +381,8 @@ export function DiceBearCustomizer({ value, onChange, onClose }: Props) {
           Use This Avatar
         </button>
       </div>
+      </>
+      )}
     </div>
   );
 }
