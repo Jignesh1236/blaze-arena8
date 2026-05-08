@@ -17,11 +17,47 @@ interface Props {
 export function VoicePanel({ state, players, myPlayerId, onEnable, onDisable, onToggleMute, onChangeMic, onSetVolume }: Props) {
   const [panelOpen, setPanelOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
 
   const playerMap = Object.fromEntries(players.map(p => [p.id, p]));
 
+  const isDenied = state.error?.includes("Permission") || state.error?.includes("denied") || state.error?.includes("NotAllowed");
+
   return (
     <div className="flex flex-col items-end gap-2">
+      {/* ── Mic Permission Guide Modal ── */}
+      {showGuide && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-sm bg-card border-2 border-amber-200/20 rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+            <h3 className="font-display text-xl text-amber-200 mb-4 text-center">How to Allow Mic 🎙️</h3>
+            <div className="space-y-4 text-sm text-amber-100/80">
+              <div className="flex gap-3">
+                <div className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0 font-bold">1</div>
+                <p>Look at the <span className="text-amber-400 font-bold">address bar</span> at the top of your browser.</p>
+              </div>
+              <div className="flex gap-3">
+                <div className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0 font-bold">2</div>
+                <p>Click the <span className="text-amber-400 font-bold">Lock icon 🔒</span> or the <span className="text-amber-400 font-bold">Mic icon</span> next to the URL.</p>
+              </div>
+              <div className="flex gap-3">
+                <div className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0 font-bold">3</div>
+                <p>Switch the <span className="text-amber-400 font-bold">Microphone</span> toggle to <span className="text-green-400 font-bold">ON</span> or "Allow".</p>
+              </div>
+              <div className="flex gap-3">
+                <div className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0 font-bold">4</div>
+                <p>Refresh the page and try joining again!</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowGuide(false)}
+              className="mt-8 w-full h-12 bg-sunset font-display text-base rounded-xl hover:opacity-90 transition-opacity"
+            >
+              Got it, partner!
+            </button>
+          </div>
+        </div>
+      )}
+
       {panelOpen && (
         <div
           className="w-72 sm:w-80 flex flex-col rounded-2xl overflow-hidden border border-amber-200/15 shadow-2xl"
@@ -45,9 +81,19 @@ export function VoicePanel({ state, players, myPlayerId, onEnable, onDisable, on
           {/* Error */}
           {state.error && (
             <div className="mx-2 mt-2 px-3 py-2 rounded-xl bg-red-500/15 border border-red-400/20 text-[10px] text-red-300 font-display">
-              {state.error.includes("Permission") || state.error.includes("denied") || state.error.includes("NotAllowed")
-                ? "Mic access denied. Allow microphone in browser settings."
-                : `Error: ${state.error}`}
+              {isDenied ? (
+                <div className="flex flex-col gap-1.5">
+                  <p>Mic access denied. Partner, you need to allow it in your browser.</p>
+                  <button
+                    onClick={() => setShowGuide(true)}
+                    className="text-amber-400 underline text-left hover:text-amber-300"
+                  >
+                    Show me how →
+                  </button>
+                </div>
+              ) : (
+                `Error: ${state.error}`
+              )}
             </div>
           )}
 
