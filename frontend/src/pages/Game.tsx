@@ -817,9 +817,13 @@ export default function GamePage() {
 
 
       {/* ── Vote Overlay ── */}
-      {voteOverlay && !kickNotification && (
+      {voteOverlay && !kickNotification && youId !== voteOverlay.targetId && !game.activeVote?.votes[youId!] && (
         <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-          <div className="bg-card/95 border-2 border-amber-200/20 rounded-2xl p-6 max-w-sm w-full shadow-2xl text-center">
+          <div className="bg-card/95 border-2 border-amber-200/20 rounded-2xl p-6 max-w-sm w-full shadow-2xl text-center relative">
+            <button 
+              onClick={() => api.castVote(game.id, youId!, "no")}
+              className="absolute top-3 right-4 text-amber-200/40 hover:text-amber-200/80 text-2xl leading-none transition-colors"
+            >×</button>
             <h3 className="font-display text-lg mb-2 text-amber-200">KICK VOTE</h3>
             <p className="text-sm opacity-80 mb-4">
               Move <span className="font-bold text-amber-400">{game.players.find(p => p.id === voteOverlay.targetId)?.name}</span> to spectators?
@@ -830,21 +834,16 @@ export default function GamePage() {
                 <div className="text-2xl font-display text-green-400">{voteOverlay.yesVotes} / {voteOverlay.totalPlayers}</div>
               </div>
             </div>
-            {youId !== voteOverlay.targetId && !game.activeVote?.votes[youId!] && (
-              <div className="flex gap-3">
-                <button 
-                  onClick={() => api.castVote(game.id, youId!, "yes")}
-                  className="flex-1 bg-green-600 hover:bg-green-500 font-display py-2 rounded-xl transition-colors"
-                >YES</button>
-                <button 
-                  onClick={() => api.castVote(game.id, youId!, "no")}
-                  className="flex-1 bg-red-600 hover:bg-red-500 font-display py-2 rounded-xl transition-colors"
-                >NO</button>
-              </div>
-            )}
-            {(youId === voteOverlay.targetId || game.activeVote?.votes[youId!]) && (
-              <p className="text-xs italic opacity-60">Waiting for others to vote...</p>
-            )}
+            <div className="flex gap-3">
+              <button 
+                onClick={() => api.castVote(game.id, youId!, "yes")}
+                className="flex-1 bg-green-600 hover:bg-green-500 font-display py-2 rounded-xl transition-colors"
+              >YES</button>
+              <button 
+                onClick={() => api.castVote(game.id, youId!, "no")}
+                className="flex-1 bg-red-600 hover:bg-red-500 font-display py-2 rounded-xl transition-colors"
+              >NO</button>
+            </div>
           </div>
         </div>
       )}
@@ -1025,7 +1024,7 @@ export default function GamePage() {
                 isHost={game.host_id === p.id}
                 isSpeaking={voiceState.speaking[p.id]}
                 onVote={(targetId) => {
-                  if (game.status === "playing") {
+                  if (game.status === "playing" && game.players.length > 2) {
                     api.voteToSpectate(game.id, youId!, targetId).catch(err => setError(err.message));
                   }
                 }}

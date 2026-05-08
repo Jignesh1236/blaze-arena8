@@ -96,6 +96,7 @@ games.post("/vote-spectate", async (c) => {
   const g = await loadGame(gameId);
   if (g.status !== "playing") return c.json({ error: "Game not in progress" }, 400);
   if (g.activeVote) return c.json({ error: "Vote already in progress" }, 400);
+  if (g.players.length <= 2) return c.json({ error: "Minimum 3 players required to vote kick" }, 400);
   if (playerId === targetId) return c.json({ error: "Can't vote yourself" }, 400);
   
   const target = g.players.find(p => p.id === targetId);
