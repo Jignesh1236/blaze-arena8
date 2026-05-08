@@ -47,16 +47,16 @@ function TopBannerAd() {
   if (!visible) return null;
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-[2000] flex justify-center bg-black/40 backdrop-blur-sm py-1 border-b border-amber-500/10">
-      <div ref={ref} className="min-h-[60px] min-w-[320px] relative">
+    <div className="fixed top-0 left-0 right-0 z-[2000] flex justify-center bg-black/60 backdrop-blur-md py-0.5 border-b border-amber-500/10">
+      <div ref={ref} className="min-h-[50px] min-w-[300px] relative flex items-center justify-center scale-90 sm:scale-100 origin-center">
         {/* Placeholder for ad */}
-        <div className="absolute inset-0 flex items-center justify-center -z-10 text-[10px] text-amber-200/20 font-display">
+        <div className="absolute inset-0 flex items-center justify-center -z-10 text-[9px] text-amber-200/10 font-display">
           ADVERTISEMENT
         </div>
       </div>
       <button 
         onClick={() => setVisible(false)}
-        className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-black/60 text-amber-200/60 flex items-center justify-center hover:text-amber-200 transition-colors text-lg leading-none"
+        className="absolute right-1 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-black/40 text-amber-200/40 flex items-center justify-center hover:text-amber-200 transition-colors text-base leading-none"
       >
         ×
       </button>

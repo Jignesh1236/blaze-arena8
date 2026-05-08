@@ -52,15 +52,15 @@ function TopBannerAd() {
   if (!visible) return null;
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-[2000] flex justify-center bg-black/40 backdrop-blur-sm py-1 border-b border-amber-500/10">
-      <div ref={ref} className="min-h-[60px] min-w-[320px] relative">
-        <div className="absolute inset-0 flex items-center justify-center -z-10 text-[10px] text-amber-200/20 font-display">
+    <div className="fixed top-0 left-0 right-0 z-[2000] flex justify-center bg-black/60 backdrop-blur-md py-0.5 border-b border-amber-500/10">
+      <div ref={ref} className="min-h-[50px] min-w-[300px] relative flex items-center justify-center scale-90 sm:scale-100 origin-center">
+        <div className="absolute inset-0 flex items-center justify-center -z-10 text-[9px] text-amber-200/10 font-display">
           ADVERTISEMENT
         </div>
       </div>
       <button 
         onClick={() => setVisible(false)}
-        className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-black/60 text-amber-200/60 flex items-center justify-center hover:text-amber-200 transition-colors text-lg leading-none"
+        className="absolute right-1 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-black/40 text-amber-200/40 flex items-center justify-center hover:text-amber-200 transition-colors text-base leading-none"
       >
         ×
       </button>
@@ -78,21 +78,7 @@ export default function HomePage() {
   const [avatar, setAvatar] = useState(AVATAR_SEEDS[0]);
   const [avatarConfig, setAvatarConfig] = useState<AvatarConfig>(DEFAULT_CONFIG);
   const [customizerOpen, setCustomizerOpen] = useState(false);
-  const [adLoading, setAdLoading] = useState(false);
-  const [adSkipVisible, setAdSkipVisible] = useState(false);
   const [busy, setBusy] = useState(false);
-
-  // ... (inside handleCustomizeClick or useEffect)
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
-    if (adLoading) {
-      setAdSkipVisible(false);
-      timer = setTimeout(() => {
-        setAdSkipVisible(true);
-      }, 7000); // Show skip/start button after 7 seconds regardless
-    }
-    return () => clearTimeout(timer);
-  }, [adLoading]);
   const [error, setError] = useState("");
   const [games, setGames] = useState<PublicGame[]>([]);
 
@@ -182,65 +168,13 @@ export default function HomePage() {
   const activeGames = games.filter((g) => g.status === "lobby" || g.status === "playing");
   const previewUrl = avatarUrl(configToSeed(avatarConfig));
 
-  const AD_URL = "https://sadpicture.com/d_m.FZzddmGPNSv/ZIGAUQ/Xezm/9uuZZVUtllkmPxTAcnw-MAjPcY4fO/T/MvtqN/z/Afy/NjzjgS5/N/yRZIsaaAWw1_p/dqD/0cxg";
-
   function handleCustomizeClick() {
-    setAdLoading(true);
+    setCustomizerOpen(true);
   }
 
   return (
     <main className="min-h-screen relative overflow-hidden bg-table">
       <TopBannerAd />
-      {adLoading && (
-        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.9)" }}>
-          <div className="w-full max-w-2xl rounded-2xl border border-amber-200/20 shadow-2xl overflow-hidden flex flex-col" style={{ background: "rgba(10,6,4,0.98)" }}>
-            <div className="flex items-center justify-between px-4 py-3 border-b border-amber-200/10 bg-black/40">
-              <div className="flex items-center gap-2">
-                <span className="text-amber-400 text-xs font-display tracking-wider">SPONSOR AD</span>
-                <span className="font-display text-sm text-amber-200/80">Support us to unlock customization! 🤠</span>
-              </div>
-              <button onClick={() => setAdLoading(false)} className="text-amber-200/40 hover:text-amber-200/80 text-2xl leading-none">×</button>
-            </div>
-            
-            <div className="relative w-full aspect-video bg-black/60">
-              <iframe
-                src={AD_URL}
-                className="w-full h-full border-0"
-                sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-                title="Advertisement"
-                onLoad={() => {
-                  // If ad loads, we can still show skip after some time
-                }}
-              />
-              {!adSkipVisible && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/40 pointer-events-none">
-                   <div className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center justify-between px-4 py-4 border-t border-amber-200/10 bg-black/40">
-              <p className="text-[11px] text-amber-200/40 font-display max-w-[60%]">
-                {adSkipVisible ? "You can now proceed to customization." : "Please wait a few seconds to support the saloon..."}
-              </p>
-              <button
-                onClick={() => {
-                  setAdLoading(false);
-                  setCustomizerOpen(true);
-                }}
-                disabled={!adSkipVisible}
-                className={`px-6 py-2.5 rounded-xl font-display text-sm transition-all active:scale-95 ${
-                  adSkipVisible 
-                    ? "bg-amber-500 hover:bg-amber-400 text-white shadow-lg shadow-amber-500/20" 
-                    : "bg-white/5 text-amber-200/20 border border-white/5 cursor-not-allowed"
-                }`}
-              >
-                {adSkipVisible ? "Start Customizing →" : "Wait 7s..."}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
       <Seo
         title="Blazing 8s — Free Real-time Multiplayer Crazy Eights Card Game"
         description="Play Crazy Eights online free with a Wild West twist. No login needed — pick a handle, create a room, share the code and deal the cards. Up to 6 players."
@@ -263,25 +197,23 @@ export default function HomePage() {
           )}
         </header>
 
-        <div className="flex justify-center mb-8">
-          <AdBanner adKey="0ceec5a7bf06f1913d15695622a746b7" width={468} height={60} />
-        </div>
-
         <section className="text-center mt-4 sm:mt-8">
           <div className="flex justify-center gap-2 mb-6">
             <div className="animate-float -rotate-12"><PlayingCard card={{ id: "h", suit: "hearts", rank: "8" }} size="lg" /></div>
             <div className="animate-float [animation-delay:200ms] rotate-3"><PlayingCard card={{ id: "s", suit: "spades", rank: "K" }} size="lg" /></div>
             <div className="animate-float [animation-delay:400ms] rotate-12"><PlayingCard card={{ id: "d", suit: "diamonds", rank: "7" }} size="lg" /></div>
           </div>
+
+          <div className="flex justify-center my-8">
+            <AdBanner adKey="0ceec5a7bf06f1913d15695622a746b7" width={468} height={60} />
+          </div>
+
           <h1 className="font-display text-5xl sm:text-7xl drop-shadow-lg">
             Blazing <span style={{ color: "oklch(0.78 0.16 70)" }}>8s</span>
           </h1>
           <p className="mt-1 text-sm font-display tracking-widest uppercase opacity-60" style={{ color: "oklch(0.85 0.04 70)" }}>
             Multiplayer Crazy Eights — Wild West Edition
           </p>
-          <div className="flex justify-center my-6">
-             <AdBanner adKey="0ceec5a7bf06f1913d15695622a746b7" width={320} height={50} />
-          </div>
           <p className="mt-3 text-lg max-w-xl mx-auto" style={{ color: "oklch(0.85 0.04 70)" }}>
             No login. Pick a handle, grab your posse — real-time multiplayer Crazy Eights. Free to play, up to 6 players.
           </p>
