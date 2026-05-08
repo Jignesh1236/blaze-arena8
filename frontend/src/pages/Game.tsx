@@ -24,7 +24,45 @@ import { useVoiceChat } from "@/hooks/useVoiceChat";
 import { VoicePanel } from "@/components/VoicePanel";
 import { SevenTVPicker, renderWithEmotes } from "@/components/SevenTVPicker";
 
+function TopBannerAd() {
+  const [visible, setVisible] = useState(true);
+  const ref = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    if (!visible || !ref.current) return;
+    const container = ref.current;
+    container.innerHTML = "";
+    
+    // Create a script element for the ad
+    const s = document.createElement('script');
+    s.src = "//webbedtrash.com/bbX/Vcs.daGBlu0aY/WLca/IehmH9xuhZMU/l/k/PgTHcbw-MLj/kqzpN/zfcSt-N/z/AXyIOmTQMH4dMJQu";
+    s.async = true;
+    s.referrerPolicy = 'no-referrer-when-downgrade';
+    
+    // This specific script expects to be inserted before the last script tag usually,
+    // but in React we append it to our container.
+    container.appendChild(s);
+  }, [visible]);
+
+  if (!visible) return null;
+
+  return (
+    <div className="fixed top-0 left-0 right-0 z-[2000] flex justify-center bg-black/40 backdrop-blur-sm py-1 border-b border-amber-500/10">
+      <div ref={ref} className="min-h-[60px] min-w-[320px] relative">
+        {/* Placeholder for ad */}
+        <div className="absolute inset-0 flex items-center justify-center -z-10 text-[10px] text-amber-200/20 font-display">
+          ADVERTISEMENT
+        </div>
+      </div>
+      <button 
+        onClick={() => setVisible(false)}
+        className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-black/60 text-amber-200/60 flex items-center justify-center hover:text-amber-200 transition-colors text-lg leading-none"
+      >
+        ×
+      </button>
+    </div>
+  );
+}
 
 function cn(...parts: (string | false | null | undefined)[]) {
 
@@ -736,6 +774,8 @@ export default function GamePage() {
     <main className="min-h-screen relative overflow-hidden flex flex-col bg-table" style={{ height: "100dvh" }}>
 
       {seoBlock}
+
+      <TopBannerAd />
 
 
 
