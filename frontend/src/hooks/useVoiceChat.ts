@@ -116,6 +116,15 @@ export function useVoiceChat(gameId: string, myPlayerId: string) {
   const enable = useCallback(async (deviceId?: string) => {
     try {
       patch({ error: null });
+
+      // Check if permission was already denied
+      if (typeof navigator !== "undefined" && navigator.permissions) {
+        const status = await navigator.permissions.query({ name: "microphone" as PermissionName });
+        if (status.state === "denied") {
+          throw new Error("Mic access is blocked in your browser settings. Please enable it to join voice chat.");
+        }
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           deviceId: deviceId ? { exact: deviceId } : undefined,

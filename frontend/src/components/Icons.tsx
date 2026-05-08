@@ -168,11 +168,29 @@ export function PlayIcon({ size = 20, color = "#fff", className, style }: IconPr
   );
 }
 
-export function TableArrowIcon({ size = 40, color = "#fff", className, style }: IconProps) {
+export function TableArrowIcon({ size = 50, color = "#fbbf24", className, style }: IconProps) {
   return (
-    <svg width={size} height={size * 0.5} viewBox="0 0 200 100" className={className} style={{ display: "inline-block", verticalAlign: "middle", flexShrink: 0, ...style }} aria-hidden="true">
-      <path d="M10 80 C 40 90, 100 85, 150 40" stroke={color} strokeWidth="14" fill="none" strokeLinecap="round" />
-      <path fill={color} d="M135 25 L165 32 L155 62 Z" transform="rotate(-35 150 40)" />
+    <svg width={size} height={size} viewBox="0 0 100 100" className={className} style={{ display: "inline-block", verticalAlign: "middle", flexShrink: 0, filter: "drop-shadow(0 0 8px rgba(251, 191, 36, 0.4))", ...style }} aria-hidden="true">
+      {/* Curved path with a gradient feel */}
+      <path 
+        d="M20 80 Q 50 85, 80 20" 
+        stroke={color} 
+        strokeWidth="10" 
+        fill="none" 
+        strokeLinecap="round" 
+        strokeDasharray="1 15"
+        className="animate-[dash_2s_linear_infinite]"
+      />
+      {/* Stylized arrowhead */}
+      <path 
+        fill={color} 
+        d="M75 15 L95 25 L85 45 Z" 
+      />
+      <style>{`
+        @keyframes dash {
+          to { stroke-dashoffset: -32; }
+        }
+      `}</style>
     </svg>
   );
 }
