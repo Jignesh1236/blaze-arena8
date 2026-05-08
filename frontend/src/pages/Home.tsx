@@ -45,7 +45,20 @@ export default function HomePage() {
   const [avatarConfig, setAvatarConfig] = useState<AvatarConfig>(DEFAULT_CONFIG);
   const [customizerOpen, setCustomizerOpen] = useState(false);
   const [adLoading, setAdLoading] = useState(false);
+  const [adSkipVisible, setAdSkipVisible] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  // ... (inside handleCustomizeClick or useEffect)
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    if (adLoading) {
+      setAdSkipVisible(false);
+      timer = setTimeout(() => {
+        setAdSkipVisible(true);
+      }, 7000); // Show skip/start button after 7 seconds regardless
+    }
+    return () => clearTimeout(timer);
+  }, [adLoading]);
   const [error, setError] = useState("");
   const [games, setGames] = useState<PublicGame[]>([]);
 
@@ -135,7 +148,7 @@ export default function HomePage() {
   const activeGames = games.filter((g) => g.status === "lobby" || g.status === "playing");
   const previewUrl = avatarUrl(configToSeed(avatarConfig));
 
-  const AD_URL = "//sadpicture.com/dIm/FRz.duG/NyveZWGvUS/Le/mX9cu/ZFUdlfkpP/TncMwdMCjzcc4JO/TiMLtWNIz/AOyiNzzvg/5AN/yyZosGaiWc1/psd/Df0axy";
+  const AD_URL = "https://sadpicture.com/dim_FkzldGmVny-cpmq9rysP_2uFvkwSxW-";
 
   function handleCustomizeClick() {
     setAdLoading(true);
@@ -158,23 +171,36 @@ export default function HomePage() {
               <iframe
                 src={AD_URL}
                 className="w-full h-full border-0"
-                sandbox="allow-scripts allow-same-origin allow-popups"
+                sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
                 title="Advertisement"
+                onLoad={() => {
+                  // If ad loads, we can still show skip after some time
+                }}
               />
+              {!adSkipVisible && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/40 pointer-events-none">
+                   <div className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-between px-4 py-4 border-t border-amber-200/10 bg-black/40">
               <p className="text-[11px] text-amber-200/40 font-display max-w-[60%]">
-                Closing this ad will return you to the saloon. Click below to start customizing!
+                {adSkipVisible ? "You can now proceed to customization." : "Please wait a few seconds to support the saloon..."}
               </p>
               <button
                 onClick={() => {
                   setAdLoading(false);
                   setCustomizerOpen(true);
                 }}
-                className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-white font-display text-sm shadow-lg shadow-amber-500/20 transition-all active:scale-95"
+                disabled={!adSkipVisible}
+                className={`px-6 py-2.5 rounded-xl font-display text-sm transition-all active:scale-95 ${
+                  adSkipVisible 
+                    ? "bg-amber-500 hover:bg-amber-400 text-white shadow-lg shadow-amber-500/20" 
+                    : "bg-white/5 text-amber-200/20 border border-white/5 cursor-not-allowed"
+                }`}
               >
-                Start Customizing →
+                {adSkipVisible ? "Start Customizing →" : "Wait 7s..."}
               </button>
             </div>
           </div>
