@@ -1,5 +1,20 @@
+import { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { Seo } from "@/components/Seo";
+
+function AdBanner({ adKey, width, height }: { adKey: string; width: number; height: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!ref.current) return;
+    ref.current.innerHTML = "";
+    (window as unknown as Record<string, unknown>)["atOptions"] = { key: adKey, format: "iframe", height, width, params: {} };
+    const s = document.createElement("script");
+    s.src = `https://www.highperformanceformat.com/${adKey}/invoke.js`;
+    s.async = true;
+    ref.current.appendChild(s);
+  }, [adKey, width, height]);
+  return <div ref={ref} style={{ width, height, overflow: "hidden" }} />;
+}
 
 export default function HowToPlay() {
   return (
@@ -13,6 +28,11 @@ export default function HowToPlay() {
       <article className="max-w-2xl mx-auto px-4 py-10">
         <Link to="/" className="text-sm opacity-80">← Home</Link>
         <h1 className="font-display text-4xl mt-4 mb-6">How to Play Blazing 8s</h1>
+
+        <div className="flex justify-center my-6">
+          <AdBanner adKey="0ceec5a7bf06f1913d15695622a746b7" width={468} height={60} />
+        </div>
+
         <p className="opacity-90 mb-4">Blazing 8s is a fast Wild West take on Crazy Eights for 2–6 players.</p>
         <h2 className="font-display text-2xl mt-8 mb-2">Goal</h2>
         <p>Be the first to empty your hand.</p>
@@ -28,6 +48,10 @@ export default function HowToPlay() {
         </ul>
         <h2 className="font-display text-2xl mt-8 mb-2">Multiplayer</h2>
         <p>Up to 6 per room. If a round is in progress when you join, you spectate until it ends — then auto-join the rematch.</p>
+
+        <div className="flex justify-center mt-10">
+          <AdBanner adKey="6faec0f0b766c85bc967985eb764e4e2" width={320} height={50} />
+        </div>
       </article>
     </main>
   );

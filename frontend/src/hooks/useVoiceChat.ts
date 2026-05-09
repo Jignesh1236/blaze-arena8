@@ -1,23 +1,41 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getSocket } from "@/lib/socket";
 
+// ─── ICE / STUN / TURN config ────────────────────────────────────────────────
 const ICE_CONFIG: RTCConfiguration = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
     { urls: "stun:stun2.l.google.com:19302" },
-    { urls: "stun:openrelay.metered.ca:80" },
-    { urls: "turn:openrelay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
-    { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
-    { urls: "turns:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
+    {
+      urls: "turn:openrelay.metered.ca:80",
+      username: "openrelayproject",
+      credential: "openrelayproject",
+    },
+    {
+      urls: "turn:openrelay.metered.ca:443",
+      username: "openrelayproject",
+      credential: "openrelayproject",
+    },
+    {
+      urls: "turns:openrelay.metered.ca:443",
+      username: "openrelayproject",
+      credential: "openrelayproject",
+    },
   ],
   iceCandidatePoolSize: 10,
+  bundlePolicy: "max-bundle",
+  rtcpMuxPolicy: "require",
 };
 
-interface PeerConn {
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface Peer {
   pc: RTCPeerConnection;
-  audioEl: HTMLAudioElement;
+  audio: HTMLAudioElement;
   socketId: string;
+  /** ICE candidates buffered until setRemoteDescription is called */
+  iceBuf: RTCIceCandidateInit[];
+  makingOffer: boolean;
 }
 
 export interface VoiceState {
@@ -27,10 +45,12 @@ export interface VoiceState {
   speaking: Record<string, boolean>;
   peers: string[];
   inputDevices: MediaDeviceInfo[];
-  selectedDeviceId: string;
+  selectedDevice: string;
   volume: number;
+  permState: "unknown" | "granted" | "denied" | "prompt";
 }
 
+// ─── Hook ─────────────────────────────────────────────────────────────────────
 export function useVoiceChat(gameId: string, myPlayerId: string) {
   const [state, setState] = useState<VoiceState>({
     enabled: false,
@@ -39,299 +59,427 @@ export function useVoiceChat(gameId: string, myPlayerId: string) {
     speaking: {},
     peers: [],
     inputDevices: [],
-    selectedDeviceId: "",
+    selectedDevice: "",
     volume: 100,
+    permState: "unknown",
   });
 
   const localStream = useRef<MediaStream | null>(null);
-  const peerConns = useRef<Map<string, PeerConn>>(new Map());
+  const peers = useRef<Map<string, Peer>>(new Map());
   const audioCtx = useRef<AudioContext | null>(null);
   const vadFrame = useRef<number>(0);
-  const isSpeaking = useRef(false);
+  const isSpeakingRef = useRef(false);
   const enabledRef = useRef(false);
+  const volumeRef = useRef(1);
 
+  // ── helpers ────────────────────────────────────────────────────────────────
   function patch(p: Partial<VoiceState>) {
     setState(s => ({ ...s, ...p }));
   }
 
+  function peerIds() {
+    return Array.from(peers.current.keys());
+  }
+
+  // ── flush buffered ICE candidates ─────────────────────────────────────────
+  async function flushIceBuf(peer: Peer) {
+    while (peer.iceBuf.length > 0) {
+      const c = peer.iceBuf.shift()!;
+      try {
+        await peer.pc.addIceCandidate(new RTCIceCandidate(c));
+      } catch {
+        /* ignore stale candidate */
+      }
+    }
+  }
+
+  // ── create a peer connection ───────────────────────────────────────────────
+  const createPeer = useCallback(
+    (playerId: string, socketId: string): Peer => {
+      const existing = peers.current.get(playerId);
+      if (existing) {
+        existing.socketId = socketId;
+        return existing;
+      }
+
+      const pc = new RTCPeerConnection(ICE_CONFIG);
+      const audio = new Audio();
+      audio.autoplay = true;
+      audio.volume = volumeRef.current;
+
+      // Add local tracks to the new PC
+      if (localStream.current) {
+        for (const track of localStream.current.getAudioTracks()) {
+          pc.addTrack(track, localStream.current);
+        }
+      }
+
+      // Remote audio
+      pc.ontrack = (e) => {
+        if (e.streams[0]) {
+          audio.srcObject = e.streams[0];
+          audio.play().catch(() => {});
+        }
+      };
+
+      // ICE relay
+      pc.onicecandidate = (e) => {
+        if (!e.candidate) return;
+        const peer = peers.current.get(playerId);
+        if (!peer) return;
+        getSocket().emit("voice:signal", {
+          toSocketId: peer.socketId,
+          fromPlayerId: myPlayerId,
+          signal: { type: "ice", candidate: e.candidate.toJSON() },
+        });
+      };
+
+      // Auto-close on failure
+      pc.onconnectionstatechange = () => {
+        const s = pc.connectionState;
+        console.log(`[voice] peer ${playerId} state: ${s}`);
+        if (s === "failed") {
+          // Attempt ICE restart once
+          pc.restartIce();
+        } else if (s === "closed") {
+          closePeer(playerId);
+        }
+      };
+
+      const peer: Peer = { pc, audio, socketId, iceBuf: [], makingOffer: false };
+      peers.current.set(playerId, peer);
+      setState(s => ({ ...s, peers: [...s.peers.filter(p => p !== playerId), playerId] }));
+      return peer;
+    },
+    [myPlayerId], // closePeer added below
+  );
+
+  // ── close a peer ──────────────────────────────────────────────────────────
   const closePeer = useCallback((playerId: string) => {
-    const conn = peerConns.current.get(playerId);
-    if (!conn) return;
-    try { conn.pc.close(); } catch { /* ignore */ }
-    conn.audioEl.srcObject = null;
-    peerConns.current.delete(playerId);
+    const peer = peers.current.get(playerId);
+    if (!peer) return;
+    try { peer.pc.close(); } catch { /* ignore */ }
+    peer.audio.pause();
+    peer.audio.srcObject = null;
+    peers.current.delete(playerId);
     setState(s => ({
       ...s,
       peers: s.peers.filter(p => p !== playerId),
-      speaking: Object.fromEntries(Object.entries(s.speaking).filter(([k]) => k !== playerId)),
+      speaking: Object.fromEntries(
+        Object.entries(s.speaking).filter(([k]) => k !== playerId),
+      ),
     }));
   }, []);
 
-  const getPeer = useCallback((playerId: string, socketId: string): PeerConn => {
-    const existing = peerConns.current.get(playerId);
-    if (existing) { existing.socketId = socketId; return existing; }
+  // ── start VAD loop ────────────────────────────────────────────────────────
+  function startVAD(stream: MediaStream) {
+    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const ctx = new AudioCtx();
+    audioCtx.current = ctx;
 
-    const pc = new RTCPeerConnection(ICE_CONFIG);
-    const audioEl = new Audio();
-    audioEl.autoplay = true;
-    audioEl.volume = 1;
+    if (ctx.state === "suspended") ctx.resume().catch(() => {});
 
-    if (localStream.current) {
-      for (const track of localStream.current.getAudioTracks()) {
-        pc.addTrack(track, localStream.current);
+    const src = ctx.createMediaStreamSource(stream);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 512;
+    src.connect(analyser);
+    const buf = new Uint8Array(analyser.frequencyBinCount);
+
+    function tick() {
+      if (!enabledRef.current) return;
+      analyser.getByteFrequencyData(buf);
+      const avg = buf.reduce((a, b) => a + b, 0) / buf.length;
+      const speaking = avg > 8;
+      if (speaking !== isSpeakingRef.current) {
+        isSpeakingRef.current = speaking;
+        getSocket().emit("voice:speaking", { gameId, playerId: myPlayerId, speaking });
       }
+      vadFrame.current = requestAnimationFrame(tick);
     }
+    vadFrame.current = requestAnimationFrame(tick);
+  }
 
-    pc.ontrack = (e) => {
-      if (e.streams[0]) {
-        audioEl.srcObject = e.streams[0];
-        // Force play to overcome autoplay restrictions
-        audioEl.play().catch(() => {});
-      }
-    };
+  // ── stop VAD loop ─────────────────────────────────────────────────────────
+  function stopVAD() {
+    cancelAnimationFrame(vadFrame.current);
+    try { audioCtx.current?.close(); } catch { /* ignore */ }
+    audioCtx.current = null;
+  }
 
-    pc.onicecandidate = (e) => {
-      if (!e.candidate) return;
-      const conn = peerConns.current.get(playerId);
-      if (!conn) return;
-      getSocket().emit("voice:signal", {
-        toSocketId: conn.socketId,
-        fromPlayerId: myPlayerId,
-        signal: { type: "ice", candidate: e.candidate.toJSON() },
-      });
-    };
-
-    pc.onconnectionstatechange = () => {
-      if (pc.connectionState === "failed" || pc.connectionState === "closed") {
-        closePeer(playerId);
-      }
-    };
-
-    const conn: PeerConn = { pc, audioEl, socketId };
-    peerConns.current.set(playerId, conn);
-    setState(s => ({ ...s, peers: [...s.peers.filter(p => p !== playerId), playerId] }));
-    return conn;
-  }, [myPlayerId, closePeer]);
-
-  const enable = useCallback(async (deviceId?: string) => {
+  // ── check mic permission ──────────────────────────────────────────────────
+  async function checkPermState(): Promise<"granted" | "denied" | "prompt" | "unknown"> {
+    if (!navigator.permissions) return "unknown";
     try {
-      patch({ error: null });
+      const result = await navigator.permissions.query({ name: "microphone" as PermissionName });
+      return result.state as "granted" | "denied" | "prompt";
+    } catch {
+      return "unknown";
+    }
+  }
 
-      // 1. Check if we're in a secure context (MediaDevices require HTTPS or localhost)
-      const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-      if (typeof window !== "undefined" && !window.isSecureContext && !isLocalhost) {
-        throw new Error("SECURITY_BLOCK: Browser mic access block kar raha hai kyunki connection HTTPS nahi hai. Agar aap mobile ya dusre device par test kar rahe hain, toh aapko HTTPS use karna hoga ya 'localhost' par chalana hoga.");
+  // ── enable voice chat ─────────────────────────────────────────────────────
+  const enable = useCallback(async (deviceId?: string) => {
+    if (enabledRef.current) return;
+    patch({ error: null });
+
+    try {
+      // 1. Secure context check
+      if (!window.isSecureContext) {
+        throw Object.assign(new Error("Mic requires HTTPS. Please use the secure (https://) URL."), { code: "INSECURE" });
       }
 
-      // 2. Check for basic API support
-      if (!navigator.mediaDevices && !(navigator as any).getUserMedia && !(navigator as any).webkitGetUserMedia) {
-        throw new Error("API_NOT_SUPPORTED: Aapka browser microphone access support nahi karta. Kripya Chrome, Firefox ya Safari ka latest version use karein.");
+      // 2. API availability
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw Object.assign(new Error("Your browser doesn't support microphone access. Try Chrome or Firefox."), { code: "NO_API" });
       }
 
-      console.log("Requesting mic permission...");
-      
-      // 3. Try requesting permission directly. 
+      // 3. Check permission state
+      const permState = await checkPermState();
+      patch({ permState });
+
+      if (permState === "denied") {
+        throw Object.assign(
+          new Error("Mic is blocked. Click the 🔒 lock icon in your browser address bar → set Microphone to Allow → refresh."),
+          { code: "DENIED" },
+        );
+      }
+
+      // 4. Request mic
       let stream: MediaStream;
       try {
-        console.log("Attempting getUserMedia...");
-        
-        // Legacy fallback for very old browsers
-        const getUserMedia = navigator.mediaDevices?.getUserMedia?.bind(navigator.mediaDevices) || 
-                           (navigator as any).webkitGetUserMedia?.bind(navigator) || 
-                           (navigator as any).mozGetUserMedia?.bind(navigator);
-
-        if (!getUserMedia) {
-          throw new Error("GET_USER_MEDIA_MISSING");
-        }
-
-        stream = await getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-            ...(deviceId ? { deviceId: { exact: deviceId } } : {})
-          },
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: deviceId
+            ? { deviceId: { exact: deviceId }, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+            : { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
         });
-      } catch (err: any) {
-        console.error("Mic Error Details:", err);
-        
-        // Fallback to simplest possible audio request
-        if (err.name === "OverconstrainedError" || err.name === "NotFoundError" || err.message === "GET_USER_MEDIA_MISSING") {
-          const getUserMedia = navigator.mediaDevices?.getUserMedia?.bind(navigator.mediaDevices) || 
-                             (navigator as any).webkitGetUserMedia?.bind(navigator);
-          
-          if (getUserMedia) {
-            stream = await getUserMedia({ audio: true });
-          } else {
-            throw new Error("Aapke browser mein mic access ka option hi nahi mil raha.");
-          }
+      } catch (err: unknown) {
+        const e = err as DOMException;
+        // Retry with plain audio if device constraints failed
+        if (e.name === "OverconstrainedError" || e.name === "NotFoundError") {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         } else {
           throw err;
         }
       }
 
-      console.log("Mic granted successfully");
       localStream.current = stream;
       enabledRef.current = true;
 
-      // 4. Initialize AudioContext for VAD (Voice Activity Detection)
-      // Some browsers require resume() on user gesture
-      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      if (ctx.state === "suspended") {
-        await ctx.resume();
-      }
-      audioCtx.current = ctx;
+      // 5. Start VAD
+      startVAD(stream);
 
-      const src = ctx.createMediaStreamSource(stream);
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 256;
-      src.connect(analyser);
-      const buf = new Uint8Array(analyser.frequencyBinCount);
-
-      const vad = () => {
-        if (!enabledRef.current) return;
-        analyser.getByteFrequencyData(buf);
-        const vol = buf.reduce((a, b) => a + b, 0) / buf.length;
-        const speaking = vol > 10;
-        if (speaking !== isSpeaking.current) {
-          isSpeaking.current = speaking;
-          getSocket().emit("voice:speaking", { gameId, playerId: myPlayerId, speaking });
-        }
-        vadFrame.current = requestAnimationFrame(vad);
-      };
-      vadFrame.current = requestAnimationFrame(vad);
-
-      // 5. Update device list
+      // 6. Enumerate devices
       const devices = await navigator.mediaDevices.enumerateDevices();
       const mics = devices.filter(d => d.kind === "audioinput");
-      patch({ enabled: true, inputDevices: mics, selectedDeviceId: deviceId || mics[0]?.deviceId || "" });
 
+      patch({
+        enabled: true,
+        permState: "granted",
+        inputDevices: mics,
+        selectedDevice: deviceId || mics[0]?.deviceId || "",
+      });
+
+      // 7. Join voice room on backend — backend replies with voice:room-peers
       getSocket().emit("voice:join", { gameId, playerId: myPlayerId });
-    } catch (e: any) {
-      console.error("Mic enable error:", e);
-      let msg = "Mic access denied";
-      if (e.name === "NotAllowedError" || e.name === "PermissionDeniedError") {
-        msg = "Permission denied. Please allow microphone access in your browser settings.";
+
+    } catch (err: unknown) {
+      const e = err as DOMException & { code?: string };
+      let msg: string;
+
+      if (e.code === "INSECURE") msg = e.message;
+      else if (e.code === "NO_API") msg = e.message;
+      else if (e.code === "DENIED") msg = e.message;
+      else if (e.name === "NotAllowedError" || e.name === "PermissionDeniedError") {
+        msg = "Permission denied. Click 'Allow' when the browser asks for mic access.";
+        patch({ permState: "denied" });
       } else if (e.name === "NotFoundError" || e.name === "DevicesNotFoundError") {
-        msg = "No microphone found. Please connect one and try again.";
-      } else if (e.name === "NotReadableError" || e.name === "TrackStartError") {
-        msg = "Microphone is already in use by another application.";
-      } else if (e.message) {
-        msg = e.message;
+        msg = "No microphone found. Plug one in and try again.";
+      } else if (e.name === "NotReadableError") {
+        msg = "Mic is in use by another app. Close it and try again.";
+      } else {
+        msg = (e as Error).message || "Could not access microphone.";
       }
+
+      console.error("[voice] enable failed:", e);
       patch({ error: msg });
     }
   }, [gameId, myPlayerId]);
 
+  // ── disable voice chat ────────────────────────────────────────────────────
   const disable = useCallback(() => {
-    cancelAnimationFrame(vadFrame.current);
-    try { audioCtx.current?.close(); } catch { /* ignore */ }
-    audioCtx.current = null;
-    if (localStream.current) {
-      for (const t of localStream.current.getTracks()) t.stop();
-      localStream.current = null;
-    }
-    const pids = Array.from(peerConns.current.keys());
-    for (const pid of pids) closePeer(pid);
+    if (!enabledRef.current) return;
+
     enabledRef.current = false;
+    stopVAD();
+
+    // Stop mic tracks
+    localStream.current?.getTracks().forEach(t => t.stop());
+    localStream.current = null;
+
+    // Close all peer connections
+    for (const pid of Array.from(peers.current.keys())) closePeer(pid);
+
+    // Notify backend
     getSocket().emit("voice:leave", { gameId, playerId: myPlayerId });
     getSocket().emit("voice:speaking", { gameId, playerId: myPlayerId, speaking: false });
-    patch({ enabled: false, muted: false, speaking: {}, peers: [] });
-    isSpeaking.current = false;
+
+    isSpeakingRef.current = false;
+    patch({ enabled: false, muted: false, peers: [], speaking: {} });
   }, [gameId, myPlayerId, closePeer]);
 
+  // ── toggle mute ───────────────────────────────────────────────────────────
   const toggleMute = useCallback(() => {
     if (!localStream.current) return;
     setState(s => {
-      const nowMuted = !s.muted;
-      for (const t of localStream.current!.getAudioTracks()) t.enabled = !nowMuted;
-      if (nowMuted) getSocket().emit("voice:speaking", { gameId, playerId: myPlayerId, speaking: false });
-      return { ...s, muted: nowMuted };
+      const muted = !s.muted;
+      localStream.current!.getAudioTracks().forEach(t => { t.enabled = !muted; });
+      if (muted) {
+        isSpeakingRef.current = false;
+        getSocket().emit("voice:speaking", { gameId, playerId: myPlayerId, speaking: false });
+      }
+      return { ...s, muted };
     });
   }, [gameId, myPlayerId]);
 
+  // ── change mic device ─────────────────────────────────────────────────────
   const changeMic = useCallback((deviceId: string) => {
-    patch({ selectedDeviceId: deviceId });
+    patch({ selectedDevice: deviceId });
     if (enabledRef.current) {
       disable();
-      setTimeout(() => enable(deviceId), 400);
+      setTimeout(() => enable(deviceId), 300);
     }
   }, [disable, enable]);
 
+  // ── volume control ────────────────────────────────────────────────────────
   const setVolume = useCallback((vol: number) => {
+    volumeRef.current = vol / 100;
     patch({ volume: vol });
-    const v = vol / 100;
-    for (const [, conn] of peerConns.current) conn.audioEl.volume = v;
+    for (const peer of peers.current.values()) {
+      peer.audio.volume = volumeRef.current;
+    }
   }, []);
 
+  // ── socket event handlers ─────────────────────────────────────────────────
   useEffect(() => {
     if (!gameId || !myPlayerId) return;
     const socket = getSocket();
 
+    // Backend sends this to the JOINER with the list of already-present peers.
+    // The joiner creates offers to each of them.
     async function onRoomPeers(peerList: { playerId: string; socketId: string }[]) {
+      console.log("[voice] room peers received:", peerList.map(p => p.playerId));
       for (const { playerId, socketId } of peerList) {
         if (playerId === myPlayerId) continue;
-        const conn = getPeer(playerId, socketId);
+        const peer = createPeer(playerId, socketId);
+
+        // Avoid duplicate offers
+        if (peer.makingOffer) continue;
+        peer.makingOffer = true;
+
         try {
-          const offer = await conn.pc.createOffer();
-          await conn.pc.setLocalDescription(offer);
+          const offer = await peer.pc.createOffer();
+          await peer.pc.setLocalDescription(offer);
           socket.emit("voice:signal", {
             toSocketId: socketId,
             fromPlayerId: myPlayerId,
-            signal: { type: "offer", sdp: conn.pc.localDescription },
+            signal: { type: "offer", sdp: peer.pc.localDescription },
           });
-        } catch (e) { console.error("[voice] offer error:", e); }
+        } catch (e) {
+          console.error("[voice] offer error:", e);
+          peer.makingOffer = false;
+        }
       }
     }
 
+    // Backend sends this to EXISTING peers when someone new joins.
+    // Existing peers just pre-register the peer entry and wait for the joiner's offer.
     function onPeerJoined({ playerId, socketId }: { playerId: string; socketId: string }) {
-      // Do NOT create an offer here — the joiner already sends offers via onRoomPeers.
-      // Creating offers from both sides causes signaling glare (state mismatch).
-      // Just pre-register the peer so we're ready to handle their incoming offer.
       if (playerId === myPlayerId || !enabledRef.current) return;
-      getPeer(playerId, socketId);
+      console.log("[voice] peer joined:", playerId);
+      createPeer(playerId, socketId);
     }
 
     function onPeerLeft({ playerId }: { playerId: string }) {
+      console.log("[voice] peer left:", playerId);
       closePeer(playerId);
     }
 
-    async function onSignal({ fromPlayerId, fromSocketId, signal }: {
+    // WebRTC signaling handler
+    async function onSignal({
+      fromPlayerId,
+      fromSocketId,
+      signal,
+    }: {
       fromPlayerId: string;
       fromSocketId: string;
-      signal: { type: string; sdp?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit };
+      signal: {
+        type: "offer" | "answer" | "ice";
+        sdp?: RTCSessionDescriptionInit;
+        candidate?: RTCIceCandidateInit;
+      };
     }) {
-      // Fix race condition: if peer not found but we have their socketId, create peer entry
-      let conn = peerConns.current.get(fromPlayerId);
-      if (!conn && fromSocketId && enabledRef.current) {
-        conn = getPeer(fromPlayerId, fromSocketId);
+      if (!enabledRef.current) return;
+
+      // Create or retrieve peer entry
+      let peer = peers.current.get(fromPlayerId);
+      if (!peer) {
+        if (signal.type !== "offer") return; // no context without an offer first
+        peer = createPeer(fromPlayerId, fromSocketId);
       }
-      if (!conn) return;
-      const { pc } = conn;
-      // Update socketId if we got it via signal (race condition safety)
-      if (fromSocketId) conn.socketId = fromSocketId;
+      peer.socketId = fromSocketId;
+      const { pc } = peer;
 
       try {
         if (signal.type === "offer" && signal.sdp) {
-          await pc.setRemoteDescription(signal.sdp);
+          // Collision guard: if we're also making an offer, the peer with
+          // lexicographically smaller playerId backs off (polite peer model).
+          const collision = peer.makingOffer || pc.signalingState !== "stable";
+          const imPolite = myPlayerId < fromPlayerId;
+
+          if (collision && !imPolite) {
+            // Impolite peer ignores the colliding offer
+            return;
+          }
+
+          if (collision && imPolite) {
+            // Polite peer rolls back its own offer
+            await pc.setLocalDescription({ type: "rollback" });
+            peer.makingOffer = false;
+          }
+
+          await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+          await flushIceBuf(peer);
+
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
+
           socket.emit("voice:signal", {
-            toSocketId: conn.socketId,
+            toSocketId: peer.socketId,
             fromPlayerId: myPlayerId,
             signal: { type: "answer", sdp: pc.localDescription },
           });
+
         } else if (signal.type === "answer" && signal.sdp) {
           if (pc.signalingState !== "have-local-offer") return;
-          await pc.setRemoteDescription(signal.sdp);
+          await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+          await flushIceBuf(peer);
+          peer.makingOffer = false;
+
         } else if (signal.type === "ice" && signal.candidate) {
-          if (pc.remoteDescription) await pc.addIceCandidate(signal.candidate);
+          if (pc.remoteDescription) {
+            await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+          } else {
+            // Buffer until remote description is set
+            peer.iceBuf.push(signal.candidate);
+          }
         }
-      } catch (e) { console.error("[voice] signal error:", signal.type, e); }
+      } catch (e) {
+        console.error("[voice] signal error:", signal.type, e);
+      }
     }
 
-    function onSpeaking({ playerId, speaking: s }: { playerId: string; speaking: boolean }) {
-      setState(prev => ({ ...prev, speaking: { ...prev.speaking, [playerId]: s } }));
+    function onSpeaking({ playerId, speaking }: { playerId: string; speaking: boolean }) {
+      setState(s => ({ ...s, speaking: { ...s.speaking, [playerId]: speaking } }));
     }
 
     socket.on("voice:room-peers", onRoomPeers);
@@ -347,7 +495,21 @@ export function useVoiceChat(gameId: string, myPlayerId: string) {
       socket.off("voice:signal", onSignal);
       socket.off("voice:speaking", onSpeaking);
     };
-  }, [gameId, myPlayerId, getPeer, closePeer]);
+  }, [gameId, myPlayerId, createPeer, closePeer]);
+
+  // ── probe permission on mount ─────────────────────────────────────────────
+  useEffect(() => {
+    checkPermState().then(permState => {
+      if (permState !== "unknown") patch({ permState });
+    });
+  }, []);
+
+  // ── cleanup on unmount ────────────────────────────────────────────────────
+  useEffect(() => {
+    return () => {
+      if (enabledRef.current) disable();
+    };
+  }, [disable]);
 
   return { state, enable, disable, toggleMute, changeMic, setVolume };
 }

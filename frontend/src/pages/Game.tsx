@@ -94,6 +94,7 @@ export default function GamePage() {
 
   const [voteOverlay, setVoteOverlay] = useState<{ targetId: string; yesVotes: number; totalPlayers: number } | null>(null);
   const [kickNotification, setKickNotification] = useState<{ secondsLeft: number } | null>(null);
+  const [hoveredCard, setHoveredCard] = useState<string | null>(null);
 
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMsgs, setChatMsgs] = useState<{ id: string; name: string; avatar: string; text: string; at: string }[]>([]);
@@ -1198,7 +1199,7 @@ export default function GamePage() {
 
             <div className="flex items-center justify-center gap-2 mb-1.5">
 
-              <span className={`text-base leading-none rounded-full transition-all ${voiceState.speaking[youId || ""] ? "ring-2 ring-green-400 shadow-[0_0_8px_rgba(74,222,128,0.6)]" : ""}`}>{profile?.avatar}</span>
+              <img src={avatarUrl(profile?.avatar || "")} alt="me" className={`w-6 h-6 rounded-full object-cover flex-shrink-0 transition-all ${voiceState.speaking[youId || ""] ? "ring-2 ring-green-400 shadow-[0_0_8px_rgba(74,222,128,0.6)]" : ""}`} />
 
               <span className="text-[10px] font-display text-amber-200/70 truncate max-w-[80px]">{profile?.name}</span>
 
@@ -1210,58 +1211,59 @@ export default function GamePage() {
 
 
 
-            {/* Hand cards — no ghost avatar, clean horizontal scroll */}
+            {/* Hand cards — fan arc, per-card z-index, proper scroll centering */}
+            <div className="overflow-x-auto no-scrollbar">
+              <div
+                className="flex items-end"
+                style={{
+                  width: "max-content",
+                  minWidth: "100%",
+                  justifyContent: "center",
+                  minHeight: "120px",
+                  paddingTop: "36px",
+                  paddingBottom: "8px",
+                  paddingLeft: "16px",
+                  paddingRight: "16px",
+                }}
+              >
+                {yourHand.map((card, i) => {
+                  const n = yourHand.length;
+                  const overlap = n > 12 ? -22 : n > 8 ? -18 : n > 5 ? -12 : -4;
+                  const centerI = (n - 1) / 2;
+                  const maxAngle = n > 10 ? 2 : n > 6 ? 3 : 4;
+                  const angle = (i - centerI) * maxAngle;
+                  const isHov = hoveredCard === card.id;
+                  const playable = !!topCard && !!game.current_suit && isYourTurn && canPlay(card, topCard, game.current_suit);
 
-            <div
-
-              className="flex items-end justify-center overflow-x-auto no-scrollbar"
-
-              style={{ minHeight: "96px", paddingTop: "20px", paddingBottom: "12px", paddingLeft: "8px", paddingRight: "8px" }}
-
-            >
-
-              {yourHand.map((card, i) => {
-
-                const playable = !!topCard && !!game.current_suit && isYourTurn && canPlay(card, topCard, game.current_suit);
-
-                return (
-
-                  <div
-
-                    key={card.id}
-
-                    className="animate-hand-deal flex-shrink-0 hover:-translate-y-4 transition-transform duration-150"
-
-                    style={{
-
-                      animationDelay: `${i * 35}ms`,
-
-                      marginLeft: i === 0 ? 0 : "-6px",
-
-                    }}
-
-                  >
-
-                    <PlayingCard
-
-                      card={card}
-
-                      size="md"
-
-                      onClick={() => onPlay(card)}
-
-                      disabled={!playable}
-
-                      highlight={playable}
-
-                    />
-
-                  </div>
-
-                );
-
-              })}
-
+                  return (
+                    <div
+                      key={card.id}
+                      className="animate-hand-deal flex-shrink-0"
+                      style={{
+                        animationDelay: `${i * 35}ms`,
+                        marginLeft: i === 0 ? 0 : `${overlap}px`,
+                        transform: isHov
+                          ? "rotate(0deg) translateY(-28px)"
+                          : `rotate(${angle}deg)`,
+                        transformOrigin: "bottom center",
+                        zIndex: isHov ? 999 : i + 1,
+                        position: "relative",
+                        transition: "transform 0.15s ease",
+                      }}
+                      onMouseEnter={() => setHoveredCard(card.id)}
+                      onMouseLeave={() => setHoveredCard(null)}
+                    >
+                      <PlayingCard
+                        card={card}
+                        size="md"
+                        onClick={() => onPlay(card)}
+                        disabled={!playable}
+                        highlight={playable}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
           </div>
