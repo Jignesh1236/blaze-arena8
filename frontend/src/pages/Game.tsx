@@ -515,8 +515,6 @@ export default function GamePage() {
             }
             if (prev.secondsLeft <= 1) {
               clearInterval(timer);
-              // Actual move to spectator
-              api.becomeSpectator(game.id, youId).catch(console.error);
               return null;
             }
             return { secondsLeft: prev.secondsLeft - 1 };
@@ -524,9 +522,6 @@ export default function GamePage() {
         }, 1000);
         addTimer(timer);
       }
-    } else if (kickNotification) {
-      // If vote was cancelled or target changed
-      setKickNotification(null);
     }
   }, [game?.activeVote, youId, game?.id, kickNotification]);
 
@@ -889,23 +884,31 @@ export default function GamePage() {
         </div>
       )}
 
-      {/* ── Kick Notification ── */}
+      {/* ── Kick Notification (Target view) ── */}
       {kickNotification && (
-        <div className="fixed inset-0 z-[500] flex items-center justify-center p-4 bg-red-950/80 backdrop-blur-md">
-          <div className="bg-card border-4 border-red-500/40 rounded-3xl p-8 max-w-md w-full shadow-2xl text-center animate-bounce">
-            <div className="text-6xl mb-4">👢</div>
-            <h2 className="font-display text-2xl text-red-400 mb-2">YOU'RE BEING BOOTED!</h2>
-            <p className="text-amber-100 opacity-80 mb-6">
-              The posse has voted. You're moving to the spectator gallery in:
+        <div className="fixed inset-0 z-[500] flex items-center justify-center p-4 bg-red-950/90 backdrop-blur-xl animate-in fade-in duration-300">
+          <div className="bg-card border-4 border-red-500 rounded-3xl p-8 max-w-md w-full shadow-[0_0_50px_rgba(239,68,68,0.3)] text-center animate-in zoom-in-95 duration-300">
+            <div className="text-7xl mb-4 animate-bounce">👢</div>
+            <h2 className="font-display text-3xl text-red-500 mb-2 tracking-tighter">THE POSSE HAS SPOKEN!</h2>
+            <p className="text-amber-100 opacity-90 mb-6 leading-relaxed">
+              You're being moved to the spectator gallery. <br/>
+              Finish your drink and head to the porch.
             </p>
-            <div className="text-6xl font-display text-red-500 mb-2">{kickNotification.secondsLeft}</div>
-            <button
-              onClick={() => api.cancelVote(game.id, youId!).catch(console.error)}
-              className="mt-4 w-full bg-white/10 hover:bg-white/20 border border-white/20 font-display py-3 rounded-xl transition-all uppercase tracking-widest text-sm"
-            >
-              ❌ Cancel & Stay
-            </button>
-            <p className="text-[10px] opacity-40 uppercase tracking-widest mt-4">Hurry up, partner!</p>
+            <div className="relative inline-block">
+              <div className="absolute inset-0 bg-red-500 blur-2xl opacity-20 animate-pulse" />
+              <div className="relative text-7xl font-display text-red-500 mb-2 drop-shadow-lg">{kickNotification.secondsLeft}</div>
+            </div>
+            
+            {/* Only host or initiator should cancel, but for now let's just make it a "dismiss" if it's not actually kicking yet */}
+            {isHost && (
+              <button
+                onClick={() => api.cancelVote(game.id, youId!).catch(console.error)}
+                className="mt-6 w-full bg-white/5 hover:bg-white/10 border border-white/10 font-display py-3 rounded-xl transition-all uppercase tracking-widest text-xs"
+              >
+                ❌ Host: Stop the Booting
+              </button>
+            )}
+            <p className="text-[10px] opacity-40 uppercase tracking-[0.2em] mt-6 font-display">No hard feelings, partner.</p>
           </div>
         </div>
       )}
@@ -1199,7 +1202,7 @@ export default function GamePage() {
 
             <div className="flex items-center justify-center gap-2 mb-1.5">
 
-              <img src={avatarUrl(profile?.avatar || "")} alt="me" className={`w-6 h-6 rounded-full object-cover flex-shrink-0 transition-all ${voiceState.speaking[youId || ""] ? "ring-2 ring-green-400 shadow-[0_0_8px_rgba(74,222,128,0.6)]" : ""}`} />
+              <img src={avatarUrl(profile?.avatar || "")} alt="me" className={`w-6 h-6 rounded-full object-cover flex-shrink-0 transition-all ${voiceState.speaking[youId || ""] ? "ring-2 ring-green-400 ring-offset-1 ring-offset-black shadow-[0_0_10px_rgba(74,222,128,0.8)]" : "border border-white/10"}`} />
 
               <span className="text-[10px] font-display text-amber-200/70 truncate max-w-[80px]">{profile?.name}</span>
 
@@ -1269,57 +1272,31 @@ export default function GamePage() {
           </div>
 
         ) : isSpectator ? (
-
           <div className="flex-shrink-0 pb-3 px-2 bg-gradient-to-t from-black/20 to-transparent border-t border-white/5">
-
-            <div className="text-center mb-2 text-[10px] font-display opacity-40 tracking-widest uppercase pt-2">All Hands</div>
-
+            <div className="text-center mb-2 text-[10px] font-display opacity-40 tracking-widest uppercase pt-2">All Hands (Spectator Mode)</div>
             <div className="flex flex-wrap justify-center gap-3 px-2">
-
               {game.players.map(p => (
-
                 <div key={p.id} className="flex flex-col items-center gap-1 bg-black/20 p-2 rounded-xl border border-white/5">
-
-                  <div className="flex" style={{ gap: "-4px" }}>
-
-                    {Array.from({ length: Math.min(game.hands[p.id]?.length || 0, 5) }).map((_, i) => (
-
-                      <div key={i} style={{ zIndex: i, marginLeft: i === 0 ? 0 : "-6px" }}>
-
-                        <PlayingCard faceDown size="sm" />
-
+                  <div className="flex" style={{ gap: "-6px" }}>
+                    {(game.hands[p.id] || []).slice(0, 8).map((card, i) => (
+                      <div key={card.id} style={{ zIndex: i, marginLeft: i === 0 ? 0 : "-12px" }}>
+                        <PlayingCard card={card} size="sm" />
                       </div>
-
                     ))}
-
-                    {(game.hands[p.id]?.length || 0) > 5 && (
-
-                      <div className="w-8 h-[46px] bg-card border border-border rounded-lg flex items-center justify-center text-[9px] font-display" style={{ marginLeft: "-6px" }}>
-
-                        +{game.hands[p.id].length - 5}
-
+                    {(game.hands[p.id]?.length || 0) > 8 && (
+                      <div className="w-8 h-[46px] bg-card border border-border rounded-lg flex items-center justify-center text-[9px] font-display" style={{ marginLeft: "-12px", zIndex: 10 }}>
+                        +{game.hands[p.id].length - 8}
                       </div>
-
                     )}
-
                   </div>
-
                   <div className="text-[9px] font-display opacity-60 flex items-center gap-1">
-
-                    <img src={avatarUrl(p.avatar)} alt={p.name} className="w-4 h-4 rounded-full object-cover" />
-
+                    <img src={avatarUrl(p.avatar)} alt={p.name} className={`w-4 h-4 rounded-full object-cover ${voiceState.speaking[p.id] ? "ring-1 ring-green-400" : ""}`} />
                     <span className="truncate max-w-[48px]">{p.name}</span>
-
                   </div>
-
                 </div>
-
               ))}
-
             </div>
-
           </div>
-
         ) : (
 
           <div className="flex-shrink-0 pb-6 text-center bg-black/30 backdrop-blur-sm pt-4 border-t border-white/5">
@@ -1415,6 +1392,7 @@ export default function GamePage() {
         <VoicePanel
           state={voiceState}
           players={game.players}
+          spectators={game.spectators}
           myPlayerId={youId || ""}
           onEnable={() => enableVoice()}
           onDisable={disableVoice}

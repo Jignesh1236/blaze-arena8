@@ -3,9 +3,14 @@ import type { VoiceState } from "@/hooks/useVoiceChat";
 import { avatarUrl } from "@/lib/avatar";
 import { MicIcon, MicMutedIcon, SettingsIcon } from "@/components/Icons";
 
+function cn(...parts: (string | false | null | undefined)[]) {
+  return parts.filter(Boolean).join(" ");
+}
+
 interface Props {
   state: VoiceState;
   players: { id: string; name: string; avatar: string }[];
+  spectators: { id: string; name: string; avatar: string }[];
   myPlayerId: string;
   onEnable: () => void;
   onDisable: () => void;
@@ -17,6 +22,7 @@ interface Props {
 export function VoicePanel({
   state,
   players,
+  spectators = [],
   myPlayerId,
   onEnable,
   onDisable,
@@ -28,7 +34,8 @@ export function VoicePanel({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
 
-  const playerMap = Object.fromEntries(players.map((p) => [p.id, p]));
+  const allParticipants = [...players, ...spectators];
+  const playerMap = Object.fromEntries(allParticipants.map((p) => [p.id, p]));
 
   const isDenied =
     state.permState === "denied" ||
@@ -183,68 +190,62 @@ export function VoicePanel({
           )}
 
           {/* Participants */}
-          <div className="px-2 py-2 space-y-1" style={{ minHeight: "80px" }}>
-            {/* Me */}
-            <div className="flex items-center gap-2 px-2 py-1.5 rounded-xl bg-white/4">
-              <img
-                src={avatarUrl(playerMap[myPlayerId]?.avatar ?? "Felix")}
-                alt="me"
-                className="w-7 h-7 rounded-full object-cover flex-shrink-0"
-              />
-              <span className="text-xs font-display text-amber-200/80 flex-1 truncate">
-                {playerMap[myPlayerId]?.name ?? "You"}
-              </span>
-              {state.muted ? (
-                <MicMutedIcon size={16} color="#ef4444" />
-              ) : (
-                <MicIcon
-                  size={16}
-                  color={state.speaking[myPlayerId] ? "#4ade80" : "#ffffff40"}
-                />
-              )}
-            </div>
+          <div className="px-2 py-2 space-y-1 overflow-y-auto max-h-60 no-scrollbar">
+            {allParticipants.map((p) => {
+              const isMe = p.id === myPlayerId;
+              const inVoice = isMe ? state.enabled : state.peers.includes(p.id);
+              const speaking = state.speaking[p.id];
+              const isSpectator = spectators.some(s => s.id === p.id);
 
-            {/* Other peers in voice */}
-            {state.peers.map((pid) => {
-              const p = playerMap[pid];
-              if (!p) return null;
-              const speaking = state.speaking[pid];
               return (
                 <div
-                  key={pid}
-                  className="flex items-center gap-2 px-2 py-1.5 rounded-xl transition-all duration-200"
-                  style={{
-                    background: speaking
-                      ? "rgba(74,222,128,0.08)"
-                      : "rgba(255,255,255,0.02)",
-                  }}
+                  key={p.id}
+                  className={cn(
+                    "flex items-center gap-2 px-2 py-1.5 rounded-xl transition-all duration-200",
+                    speaking ? "bg-green-500/15" : "bg-white/4",
+                    !inVoice && "opacity-40"
+                  )}
                 >
-                  <img
-                    src={avatarUrl(p.avatar)}
-                    alt={p.name}
-                    className="w-7 h-7 rounded-full object-cover flex-shrink-0 transition-all duration-200"
-                    style={{
-                      filter: speaking
-                        ? "drop-shadow(0 0 4px rgba(74,222,128,0.6))"
-                        : "none",
-                    }}
-                  />
-                  <span className="text-xs font-display text-amber-200/70 flex-1 truncate">
-                    {p.name}
-                  </span>
-                  <MicIcon size={16} color={speaking ? "#4ade80" : "#ffffff30"} />
+                  <div className="relative shrink-0">
+                    <img
+                      src={avatarUrl(p.avatar)}
+                      alt={p.name}
+                      className={cn(
+                        "w-8 h-8 rounded-full object-cover transition-all duration-200 border-2",
+                        speaking ? "border-green-400 shadow-[0_0_12px_rgba(74,222,128,0.6)]" : "border-transparent"
+                      )}
+                    />
+                    {inVoice && !speaking && (
+                      <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-green-500 border-2 border-black" />
+                    )}
+                  </div>
+                  <div className="flex flex-col flex-1 min-w-0">
+                    <span className={cn(
+                      "text-[11px] font-display truncate leading-tight",
+                      speaking ? "text-green-400" : "text-amber-200/80"
+                    )}>
+                      {p.name} {isMe && "(You)"}
+                    </span>
+                    {isSpectator && (
+                      <span className="text-[8px] font-display text-amber-200/30 uppercase tracking-tighter">Spectating</span>
+                    )}
+                  </div>
+                  {inVoice ? (
+                    isMe && state.muted ? (
+                      <MicMutedIcon size={14} color="#ef4444" />
+                    ) : (
+                      <MicIcon size={14} color={speaking ? "#4ade80" : "#ffffff40"} />
+                    )
+                  ) : (
+                    <span className="text-[8px] font-display text-amber-200/20 uppercase tracking-tighter">Offline</span>
+                  )}
                 </div>
               );
             })}
 
-            {state.enabled && state.peers.length === 0 && (
-              <div className="text-center text-[10px] font-display text-amber-200/25 py-3 tracking-widest">
-                No one else in voice yet…
-              </div>
-            )}
             {!state.enabled && (
-              <div className="text-center text-[10px] font-display text-amber-200/25 py-3 tracking-widest">
-                Enable mic to join voice chat
+              <div className="text-center text-[9px] font-display text-amber-200/25 py-2 tracking-widest uppercase mt-2">
+                Join voice to chat with the posse
               </div>
             )}
           </div>

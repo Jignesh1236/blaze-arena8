@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { store } from "../lib/store.js";
 import { buildDeck, canPlay, genRoomCode, type Card, type GameRow } from "../lib/game.js";
-import { HAND_SIZE, drawCards, loadGame, nextTurn, persist, suitSym } from "../lib/engine.js";
+import { HAND_SIZE, drawCards, loadGame, nextTurn, persist, suitSym, movePlayerToSpectator } from "../lib/engine.js";
 
 export const games = new Hono();
 
@@ -140,11 +140,12 @@ games.post("/cast-vote", async (c) => {
   // Need simple majority (more than half of players)
   if (yesVotes > totalPlayers / 2) {
     // Vote passed!
-    // We don't move immediately to allow for the 5s notification on frontend
+    // Move the player to spectators immediately on the backend
+    await movePlayerToSpectator(g, g.activeVote.targetId);
   }
 
   // Check if everyone voted
-  if (votes.length >= totalPlayers - 1) { // -1 because target doesn't vote
+  if (g.activeVote && votes.length >= totalPlayers - 1) { // -1 because target doesn't vote
     if (yesVotes <= totalPlayers / 2) {
       // Vote failed, clear it
       g.activeVote = null;
@@ -398,36 +399,6 @@ games.post("/spectate", async (c) => {
     z.object({ gameId: z.string().min(1), playerId: z.string().min(1) }),
   );
   const g = await loadGame(gameId);
-  const player = g.players.find((p) => p.id === playerId);
-  if (!player) return c.json({ error: "Not a player" }, 400);
-
-  // Move player to spectators
-  g.players = g.players.filter((p) => p.id !== playerId);
-  if (!g.spectators.some((p) => p.id === playerId)) {
-    g.spectators.push(player);
-  }
-  delete g.hands[playerId];
-
-  // Reset active vote if this was the target
-  if (g.activeVote?.targetId === playerId) {
-    g.activeVote = null;
-  }
-
-  // If game was playing and only 1 player left, they win
-  if (g.status === "playing" && g.players.length === 1) {
-    g.status = "finished";
-    g.winner_id = g.players[0].id;
-    g.last_action = { type: "win", by: g.players[0].id, text: `${player.name} became a spectator. ${g.players[0].name} wins!` };
-  } else if (g.status === "playing" && g.players.length === 0) {
-    // If no players left, go back to lobby
-    g.status = "lobby";
-    g.current_turn = null;
-  } else if (g.current_turn === playerId && g.status === "playing") {
-    // If it was their turn, move to next
-    g.current_turn = nextTurn(g);
-  }
-
-  g.last_action = g.last_action || { type: "spectate", by: playerId, text: `${player.name} is now spectating` };
-  await persist(g);
+  await movePlayerToSpectator(g, playerId);
   return c.json({ ok: true });
 });

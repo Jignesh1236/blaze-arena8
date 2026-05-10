@@ -66,14 +66,15 @@ export function PlayingCard({
   }
 
   // ── Face-up card ─────────────────────────────────────────────────────────
-  const isWild = card.rank === "8" || card.rank === "K";
-  const isSwitch = card.rank === "K";
-  const displaySuit = overrideSuit ?? (isWild ? undefined : card.suit);
+  const c = card!; // We know card is defined here because of the check above
+  const isWild = c.rank === "8" || c.rank === "K";
+  const isSwitch = c.rank === "K";
+  const displaySuit = overrideSuit ?? (isWild ? undefined : c.suit);
   const colorHex = displaySuit ? SUIT_HEX[displaySuit] : SUIT_HEX.spades;
   const sym = displaySuit ? SUIT_SYMBOL[displaySuit] : "";
 
   const isClickable = !!onClick && !disabled;
-  const pipCount = PIP_COUNTS[card.rank] ?? 0;
+  const pipCount = PIP_COUNTS[c.rank] ?? 0;
 
   // Build center content
   function centerContent() {
@@ -82,23 +83,20 @@ export function PlayingCard({
         <span style={{ color: "oklch(0.72 0.18 70)", fontSize: sz.center }}>⇄</span>
       );
     }
-    if (card.rank === "8") {
+    if (c.rank === "8") {
       return (
         <span style={{ color: "oklch(0.72 0.18 70)", fontSize: sz.center }}>★</span>
       );
     }
-    if (card.rank === "J") {
-      return <span style={{ color: colorHex, fontSize: sz.center, opacity: 0.85 }}>J</span>;
+    if (c.rank === "J") {
+      return <span style={{ color: colorHex, fontSize: sz.center, opacity: 0.95 }}>J</span>;
     }
-    if (card.rank === "Q") {
-      return <span style={{ color: colorHex, fontSize: sz.center, opacity: 0.85 }}>Q</span>;
-    }
-    if (card.rank === "A") {
-      return <span style={{ color: colorHex, fontSize: `calc(${sz.center} * 1.4)`, opacity: 0.9 }}>{sym}</span>;
+    if (c.rank === "Q") {
+      return <span style={{ color: colorHex, fontSize: sz.center, opacity: 0.95 }}>Q</span>;
     }
     // Number cards — large center suit symbol
     if (sym) {
-      return <span style={{ color: colorHex, fontSize: sz.center, opacity: 0.85 }}>{sym}</span>;
+      return <span style={{ color: colorHex, fontSize: sz.center, opacity: 0.95 }}>{sym}</span>;
     }
     return null;
   }
@@ -118,8 +116,8 @@ export function PlayingCard({
         sz.card,
         // Cursor
         isClickable ? "cursor-pointer" : "cursor-default",
-        // Disabled
-        disabled && onClick && "opacity-50 grayscale-[30%] cursor-not-allowed",
+        // Disabled - Fixed transparency: removed opacity-90, using higher opacity or just grayscale
+        disabled && onClick && "grayscale-[40%] brightness-90 cursor-not-allowed",
         // Wild card background
         isWild
           ? "border-amber-300 bg-gradient-to-br from-amber-50 via-yellow-50 to-amber-100"
@@ -140,7 +138,7 @@ export function PlayingCard({
           sz.corner,
         )}
       >
-        <span className="font-display">{isSwitch ? "K" : card.rank}</span>
+        <span className="font-display">{isSwitch ? "K" : c.rank}</span>
         {sym && <span style={{ fontSize: "0.85em", lineHeight: 1 }}>{sym}</span>}
       </div>
 
@@ -151,7 +149,7 @@ export function PlayingCard({
           sz.corner,
         )}
       >
-        <span className="font-display">{isSwitch ? "K" : card.rank}</span>
+        <span className="font-display">{isSwitch ? "K" : c.rank}</span>
         {sym && <span style={{ fontSize: "0.85em", lineHeight: 1 }}>{sym}</span>}
       </div>
 

@@ -148,4 +148,38 @@ export async function forceSkipTurn(gameId: string) {
   await persist(g);
 }
 
+export async function movePlayerToSpectator(g: GameRow, playerId: string) {
+  const player = g.players.find((p) => p.id === playerId);
+  if (!player) return;
+
+  // Move player to spectators
+  g.players = g.players.filter((p) => p.id !== playerId);
+  if (!g.spectators.some((p) => p.id === playerId)) {
+    g.spectators.push(player);
+  }
+  delete g.hands[playerId];
+
+  // Reset active vote if this was the target
+  if (g.activeVote?.targetId === playerId) {
+    g.activeVote = null;
+  }
+
+  // If game was playing and only 1 player left, they win
+  if (g.status === "playing" && g.players.length === 1) {
+    g.status = "finished";
+    g.winner_id = g.players[0].id;
+    g.last_action = { type: "win", by: g.players[0].id, text: `${player.name} became a spectator. ${g.players[0].name} wins!` };
+  } else if (g.status === "playing" && g.players.length === 0) {
+    // If no players left, go back to lobby
+    g.status = "lobby";
+    g.current_turn = null;
+  } else if (g.current_turn === playerId && g.status === "playing") {
+    // If it was their turn, move to next
+    g.current_turn = nextTurn(g);
+  }
+
+  g.last_action = g.last_action || { type: "spectate", by: playerId, text: `${player.name} is now spectating` };
+  await persist(g);
+}
+
 export { buildDeck, canPlay, suitSym, type Card, type GameRow, type Suit };

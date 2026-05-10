@@ -53,14 +53,13 @@ export function PlayerSeat({ player, cardCount, isCurrent, isHost, isSpeaking, o
             loading="lazy"
           />
 
-          {/* Speaking ring */}
+          {/* Speaking ring (Discord-style) */}
           {isSpeaking && (
             <div
-              className="absolute inset-0 rounded-full pointer-events-none"
+              className="absolute inset-0 rounded-full pointer-events-none z-20"
               style={{
-                border: "3px solid rgba(74,222,128,0.9)",
-                boxShadow: "0 0 10px rgba(74,222,128,0.7), inset 0 0 8px rgba(74,222,128,0.2)",
-                animation: "pulse 1s ease-in-out infinite",
+                border: "4px solid #4ade80",
+                boxShadow: "0 0 12px rgba(74,222,128,0.8)",
               }}
             />
           )}
