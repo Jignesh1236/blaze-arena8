@@ -44,8 +44,10 @@ export function GlobalAds() {
     checkAdBlock();
   }, []);
 
-  // Notification Ad: Run once on mount
+  // Notification Ad: Run once on mount, only on allowed pages
   useEffect(() => {
+    if (!isAllowedPage) return;
+
     const scriptUrl = "https://pl29360580.profitablecpmratenetwork.com/d9/e7/dd/d9e7dd33439880ec8757779e00d18aac.js";
     
     // Use a global flag to ensure it only runs ONCE ever per page load
@@ -57,7 +59,7 @@ export function GlobalAds() {
     s.async = true;
     s.setAttribute("data-ad", "notification");
     document.body.appendChild(s);
-  }, []);
+  }, [isAllowedPage]);
 
   // Popunder Logic
   useEffect(() => {
@@ -128,4 +130,4 @@ export function GlobalAds() {
       )}
     </>
   );
-}
+      }
