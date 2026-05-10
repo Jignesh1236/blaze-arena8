@@ -320,170 +320,123 @@ export default function GamePage() {
   const yourHand = useMemo(() => (youId && game ? game.hands[youId] ?? [] : []), [game, youId]);
 
   const others = useMemo(() => {
-
-    if (!game) return [];
-
-    return youId ? game.players.filter(p => p.id !== youId) : game.players;
-
+    if (!game || !youId) return game?.players || [];
+    const idx = game.players.findIndex(p => p.id === youId);
+    if (idx === -1) return game.players;
+    // Rotate players so "You" is at the start (but we'll filter "You" out for others)
+    const rotated = [...game.players.slice(idx + 1), ...game.players.slice(0, idx)];
+    return rotated;
   }, [game, youId]);
 
-
-
-  // Better positions — 2-player opponent never behind header, all clamped to visible area
-
+  // Better circular positions — distributed evenly around the table
   const positions = useMemo(() => {
-
     const count = others.length;
-
     if (count === 0) return [];
-
-    if (count === 1) return [{ top: "14%", left: "50%", angle: 90 }];
-
+    
     return others.map((_, i) => {
-
-      const angle = 180 - (i * (180 / (count - 1)));
-
+      // We want to distribute others across the remaining arc.
+      // "You" is at 270 deg (bottom).
+      // Others should be spread from roughly 240 deg (bottom-left) to -60 deg (bottom-right) clockwise.
+      // Total arc for others: ~300 degrees.
+      const startAngle = 210; // Left-ish
+      const endAngle = -30;   // Right-ish
+      const arc = startAngle - endAngle;
+      
+      let angle;
+      if (count === 1) {
+        angle = 90; // Directly opposite
+      } else {
+        angle = startAngle - (i * (arc / (count - 1)));
+      }
+      
       const rad = (angle * Math.PI) / 180;
-
       const isMobile = window.innerWidth < 640;
-
-      const rx = isMobile ? 37 : 36;
-
-      const ry = isMobile ? 22 : 26;
-
+      
+      // Ellipse radii
+      const rx = isMobile ? 38 : 36;
+      const ry = isMobile ? 24 : 28;
+      
       const left = 50 + rx * Math.cos(rad);
-
-      const top = Math.max(13, 42 - ry * Math.sin(rad));
-
+      // Center of table is at 46%
+      const top = 46 - ry * Math.sin(rad);
+      
       return { top: `${top}%`, left: `${left}%`, angle };
-
     });
-
   }, [others.length]);
 
-
-
   // Get viewport position (%) of a player
-
   const getPlayerPos = useCallback((playerId: string): { x: number; y: number } | null => {
-
     if (playerId === youId) return { x: 50, y: 86 };
-
     const idx = others.findIndex(p => p.id === playerId);
-
     if (idx !== -1 && positions[idx]) return { x: parseFloat(positions[idx].left), y: parseFloat(positions[idx].top) };
-
     return null;
-
   }, [youId, others, positions]);
 
-
-
   // Trigger animations for other players' moves
-
   useEffect(() => {
-
     if (!game?.last_action || game.last_action.type !== "play") return;
-
     const action = game.last_action;
-
     if (!action.by) return;
 
-
-
     const actionKey = `${action.by}-${action.card_rank}-${game.updated_at}`;
-
     if (lastProcessedAction === actionKey) return;
-
     setLastProcessedAction(actionKey);
 
-
-
     const byPos = getPlayerPos(action.by);
-
     const topCard = game.discard[game.discard.length - 1];
 
-
-
     if (action.card_rank === "K" && action.swap_target) {
-
       const targetPos = getPlayerPos(action.swap_target);
-
       if (byPos && targetPos) {
-
         launchCard(null, byPos.x, byPos.y, targetPos.x, targetPos.y, true);
-
         addTimer(setTimeout(() => launchCard(null, targetPos.x, targetPos.y, byPos.x, byPos.y, true), 100));
-
         const byPlayer = game.players.find(p => p.id === action.by);
-
         const tPlayer = game.players.find(p => p.id === action.swap_target);
-
         if (byPlayer && tPlayer) {
-
           setSwitchOverlay({ fromAvatar: byPlayer.avatar, fromName: byPlayer.name, toAvatar: tPlayer.avatar, toName: tPlayer.name, key: actionKey });
-
           addTimer(setTimeout(() => setSwitchOverlay(null), 1800));
-
         }
-
       }
-
       return;
-
     }
-
-
 
     if (action.card_rank === "Q") {
-
       setReverseFlash(actionKey);
-
       addTimer(setTimeout(() => setReverseFlash(null), 1500));
-
     }
-
-
 
     if (action.by !== youId && byPos && topCard) {
-
       launchCard(topCard, byPos.x, byPos.y, 50, 46);
-
     }
-
   }, [game?.last_action, game?.updated_at, getPlayerPos, launchCard, youId]);
 
-
-
   const arrows = useMemo(() => {
-
     if (!game || game.status !== "playing") return [];
-
-    const allPos = [...positions, { left: "50%", top: "86%", angle: 270 }];
-
-    allPos.sort((a, b) => a.angle - b.angle);
-
-    return allPos.map((p1, i) => {
-
-      const p2 = allPos[(i + 1) % allPos.length];
-
-      let midAngle = (p1.angle + p2.angle) / 2;
-
-      if (Math.abs(p1.angle - p2.angle) > 180) midAngle += 180;
-
-      const rad = (midAngle * Math.PI) / 180;
-
+    
+    // We want 6-8 arrows in a circle
+    const arrowCount = 8;
+    const arrowsArr = [];
+    const dir = game.direction;
+    
+    for (let i = 0; i < arrowCount; i++) {
+      const angle = (i * (360 / arrowCount));
+      const rad = (angle * Math.PI) / 180;
       const isMobile = window.innerWidth < 640;
-
-      const left = 50 + (isMobile ? 28 : 27) * Math.cos(rad);
-
-      const top = 46 - (isMobile ? 17 : 20) * Math.sin(rad);
-
-      return { left: `${left}%`, top: `${top}%`, rotate: `${midAngle + (game.direction === 1 ? 90 : -90)}deg` };
-
-    });
-
-  }, [positions, game?.direction, game?.status]);
+      
+      const rx = isMobile ? 28 : 26;
+      const ry = isMobile ? 18 : 22;
+      
+      const left = 50 + rx * Math.cos(rad);
+      const top = 46 - ry * Math.sin(rad);
+      
+      // Rotate arrow to point along the tangent of the ellipse
+      // Tangent angle is angle + 90 or angle - 90
+      const rotate = angle + (dir === 1 ? -90 : 90);
+      
+      arrowsArr.push({ left: `${left}%`, top: `${top}%`, rotate: `${rotate}deg` });
+    }
+    return arrowsArr;
+  }, [game?.direction, game?.status]);
 
 
 
