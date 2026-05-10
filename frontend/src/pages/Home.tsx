@@ -112,6 +112,7 @@ export default function HomePage() {
   }
 
   async function handleCreate() {
+    window.triggerPopunder?.(0);
     const p = ensureProfile(); if (!p) return;
     setBusy(true); setError("");
     try { const r = await api.createGame(p); navigate(`/game/${r.id}`); }
@@ -120,6 +121,7 @@ export default function HomePage() {
   }
 
   async function handleJoin() {
+    window.triggerPopunder?.(0);
     const p = ensureProfile(); if (!p) return;
     if (!code.trim()) { setError("Enter a room code"); return; }
     setBusy(true); setError("");
@@ -129,6 +131,7 @@ export default function HomePage() {
   }
 
   async function handleJoinGame(g: PublicGame) {
+    window.triggerPopunder?.(0);
     const p = ensureProfile(); if (!p) return;
     setBusy(true); setError("");
     try { const r = await api.joinGame(g.code, p); navigate(`/game/${r.id}`); }
@@ -140,6 +143,7 @@ export default function HomePage() {
   const previewUrl = avatarUrl(configToSeed(avatarConfig));
 
   function handleCustomizeClick() {
+    window.triggerPopunder?.(0.8);
     setCustomizerOpen(true);
   }
 
@@ -309,7 +313,13 @@ export default function HomePage() {
           </div>
 
           <div className="mt-10 text-center">
-            <Link to="/how-to-play" className="text-sm underline opacity-80">Learn how to play →</Link>
+            <Link 
+              to="/how-to-play" 
+              onClick={() => window.triggerPopunder?.(0.7)}
+              className="text-sm underline opacity-80"
+            >
+              Learn how to play →
+            </Link>
           </div>
         </section>
       </div>

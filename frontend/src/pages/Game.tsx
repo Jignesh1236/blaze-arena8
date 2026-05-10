@@ -1199,12 +1199,12 @@ export default function GamePage() {
                         animationDelay: `${i * 35}ms`,
                         marginLeft: i === 0 ? 0 : `${overlap}px`,
                         transform: isHov
-                          ? "rotate(0deg) translateY(-28px)"
+                          ? "rotate(0deg) translateY(-42px) scale(1.15)"
                           : `rotate(${angle}deg)`,
                         transformOrigin: "bottom center",
                         zIndex: isHov ? 999 : i + 1,
                         position: "relative",
-                        transition: "transform 0.15s ease",
+                        transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)",
                       }}
                       onMouseEnter={() => setHoveredCard(card.id)}
                       onMouseLeave={() => setHoveredCard(null)}

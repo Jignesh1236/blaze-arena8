@@ -208,11 +208,12 @@ export function useVoiceChat(gameId: string, myPlayerId: string) {
 
   // ── check mic permission ──────────────────────────────────────────────────
   async function checkPermState(): Promise<"granted" | "denied" | "prompt" | "unknown"> {
-    if (!navigator.permissions) return "unknown";
+    if (!navigator.permissions || !navigator.permissions.query) return "unknown";
     try {
       const result = await navigator.permissions.query({ name: "microphone" as PermissionName });
       return result.state as "granted" | "denied" | "prompt";
-    } catch {
+    } catch (e) {
+      console.warn("[voice] permissions.query failed:", e);
       return "unknown";
     }
   }
@@ -247,19 +248,14 @@ export function useVoiceChat(gameId: string, myPlayerId: string) {
       // 4. Request mic
       let stream: MediaStream;
       try {
+        console.log("[voice] requesting mic access...");
         stream = await navigator.mediaDevices.getUserMedia({
-          audio: deviceId
-            ? { deviceId: { exact: deviceId }, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
-            : { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+          audio: deviceId ? { deviceId: { exact: deviceId } } : true
         });
       } catch (err: unknown) {
         const e = err as DOMException;
-        // Retry with plain audio if device constraints failed
-        if (e.name === "OverconstrainedError" || e.name === "NotFoundError") {
-          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        } else {
-          throw err;
-        }
+        console.warn("[voice] specific constraints failed, retrying with basic audio:", e.name);
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       }
 
       localStream.current = stream;
