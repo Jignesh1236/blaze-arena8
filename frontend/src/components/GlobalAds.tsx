@@ -10,7 +10,7 @@ declare global {
 
 export function GlobalAds() {
   const location = useLocation();
-  const isGamePage = location.pathname.startsWith("/game/");
+  const isAllowedPage = location.pathname === "/" || location.pathname === "/how-to-play";
 
   // Notification Ad: Run once on mount
   useEffect(() => {
@@ -32,6 +32,8 @@ export function GlobalAds() {
     const popunderUrl = "https://pl29360324.profitablecpmratenetwork.com/47/48/c6/4748c62e293f43488f91677c7fb2ca4d.js";
 
     const injectPopunder = () => {
+      if (!isAllowedPage) return;
+
       console.log("[Ads] Injecting popunder script...");
       const s = document.createElement("script");
       s.src = popunderUrl;
@@ -49,13 +51,15 @@ export function GlobalAds() {
       injectPopunder();
     };
 
-    // "Default" behavior: Run once on mount automatically
-    injectPopunder();
+    // "Default" behavior: Run once on mount automatically if on allowed page
+    if (isAllowedPage) {
+      injectPopunder();
+    }
 
     return () => {
       // Keep it global
     };
-  }, []);
+  }, [isAllowedPage]);
 
   return null;
 }
