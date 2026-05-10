@@ -528,8 +528,8 @@ export default function GamePage() {
   const isYourTurn = game?.current_turn === youId && game?.status === "playing";
 
   const isPlayer = !!(youId && game?.players.some(p => p.id === youId));
-
   const isSpectator = !!(youId && game?.spectators?.some(p => p.id === youId));
+  const isHost = game?.host_id === youId;
 
 
 
