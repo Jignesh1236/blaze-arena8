@@ -4,7 +4,7 @@ import { useLocation } from "react-router-dom";
 // Declare global function type
 declare global {
   interface Window {
-    triggerPopunder: (probability: number) => void;
+    triggerPopunder: (probability?: number) => void;
   }
 }
 
