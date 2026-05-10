@@ -413,7 +413,7 @@ export default function GamePage() {
   const arrows = useMemo(() => {
     if (!game || game.status !== "playing") return [];
     
-    // We want 6-8 arrows in a circle
+    // We want 8 arrows in a circle
     const arrowCount = 8;
     const arrowsArr = [];
     const dir = game.direction;
@@ -423,16 +423,15 @@ export default function GamePage() {
       const rad = (angle * Math.PI) / 180;
       const isMobile = window.innerWidth < 640;
       
-      const rx = isMobile ? 32 : 30;
-      const ry = isMobile ? 22 : 26;
+      // Radii for the arrow ring (closer to center than players)
+      const rx = isMobile ? 24 : 22;
+      const ry = isMobile ? 16 : 18;
       
       const left = 50 + rx * Math.cos(rad);
       const top = 46 - ry * Math.sin(rad);
       
       // Rotate arrow to point along the tangent of the ellipse
-      // Angle 0 is 3 o'clock. Clockwise direction means pointing DOWN (+90 deg).
-      // So rotate = -angle + (dir === 1 ? 90 : -90)
-      // We use -angle because our y-axis is inverted in screen coords
+      // dir === 1 is clockwise, dir === -1 is counter-clockwise
       const rotate = -angle + (dir === 1 ? 90 : -90);
       
       arrowsArr.push({ left: `${left}%`, top: `${top}%`, rotate: `${rotate}deg` });
