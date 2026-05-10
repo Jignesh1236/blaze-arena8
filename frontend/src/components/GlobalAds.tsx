@@ -31,30 +31,31 @@ export function GlobalAds() {
   useEffect(() => {
     const popunderUrl = "https://pl29360324.profitablecpmratenetwork.com/47/48/c6/4748c62e293f43488f91677c7fb2ca4d.js";
 
-    window.triggerPopunder = (probability: number) => {
-      if (isGamePage) return;
-      if (Math.random() > probability) return;
-
-      console.log(`[Ads] Triggering popunder... (prob: ${probability})`);
-      
-      // For popunders to work reliably, they often need to be injected 
-      // directly into the DOM during a user interaction.
+    const injectPopunder = () => {
+      console.log("[Ads] Injecting popunder script...");
       const s = document.createElement("script");
       s.src = popunderUrl;
-      // We don't use async here to try and get it to execute as soon as possible
-      // though appendChild is still technically async in its execution.
       document.head.appendChild(s);
       
-      // Cleanup script after a short delay so it can be re-injected on next click
       setTimeout(() => {
         try { document.head.removeChild(s); } catch(e) {}
       }, 1000);
     };
 
-    return () => {
-      // Keep it global even if component unmounts for a moment
+    // Global trigger for clicks
+    window.triggerPopunder = (probability: number = 1) => {
+      // If probability is passed, still respect it, but we'll call it with 1 by default
+      if (probability > 0 && Math.random() > probability) return;
+      injectPopunder();
     };
-  }, [isGamePage]);
+
+    // "Default" behavior: Run once on mount automatically
+    injectPopunder();
+
+    return () => {
+      // Keep it global
+    };
+  }, []);
 
   return null;
 }
