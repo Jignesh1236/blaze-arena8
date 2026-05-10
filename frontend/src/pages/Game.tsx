@@ -423,15 +423,17 @@ export default function GamePage() {
       const rad = (angle * Math.PI) / 180;
       const isMobile = window.innerWidth < 640;
       
-      const rx = isMobile ? 28 : 26;
-      const ry = isMobile ? 18 : 22;
+      const rx = isMobile ? 32 : 30;
+      const ry = isMobile ? 22 : 26;
       
       const left = 50 + rx * Math.cos(rad);
       const top = 46 - ry * Math.sin(rad);
       
       // Rotate arrow to point along the tangent of the ellipse
-      // Tangent angle is angle + 90 or angle - 90
-      const rotate = angle + (dir === 1 ? -90 : 90);
+      // Angle 0 is 3 o'clock. Clockwise direction means pointing DOWN (+90 deg).
+      // So rotate = -angle + (dir === 1 ? 90 : -90)
+      // We use -angle because our y-axis is inverted in screen coords
+      const rotate = -angle + (dir === 1 ? 90 : -90);
       
       arrowsArr.push({ left: `${left}%`, top: `${top}%`, rotate: `${rotate}deg` });
     }
@@ -979,29 +981,18 @@ export default function GamePage() {
             {/* Direction arrows */}
 
             {arrows.map((arrow, i) => (
-
               <div
-
                 key={i}
-
-                className={cn("absolute transition-all duration-600", reverseFlash ? "opacity-90" : "opacity-25")}
-
+                className={cn("absolute transition-all duration-600", reverseFlash ? "opacity-90" : "opacity-40")}
                 style={{
-
                   left: arrow.left, top: arrow.top,
-
                   transform: `translate(-50%, -50%) rotate(${arrow.rotate})`,
-
-                  filter: reverseFlash ? "drop-shadow(0 0 6px rgba(251,191,36,0.8))" : undefined,
-
-                  transition: "color 0.4s, filter 0.4s",
-
+                  filter: reverseFlash ? "drop-shadow(0 0 8px rgba(251,191,36,0.9))" : "drop-shadow(0 0 3px rgba(251,191,36,0.4))",
+                  transition: "all 0.4s",
                 }}
-
               >
-                <TableArrowIcon size={28} color="#fff" className="drop-shadow-[0_0_4px_rgba(255,255,255,0.6)]" />
+                <TableArrowIcon size={24} color="#fbbf24" />
               </div>
-
             ))}
 
           </div>
