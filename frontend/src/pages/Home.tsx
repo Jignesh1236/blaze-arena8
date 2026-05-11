@@ -112,7 +112,6 @@ export default function HomePage() {
   }
 
   async function handleCreate() {
-    window.triggerPopunder?.();
     const p = ensureProfile(); if (!p) return;
     setBusy(true); setError("");
     try { const r = await api.createGame(p); navigate(`/game/${r.id}`); }
@@ -121,7 +120,6 @@ export default function HomePage() {
   }
 
   async function handleJoin() {
-    window.triggerPopunder?.();
     const p = ensureProfile(); if (!p) return;
     if (!code.trim()) { setError("Enter a room code"); return; }
     setBusy(true); setError("");
@@ -131,7 +129,6 @@ export default function HomePage() {
   }
 
   async function handleJoinGame(g: PublicGame) {
-    window.triggerPopunder?.();
     const p = ensureProfile(); if (!p) return;
     setBusy(true); setError("");
     try { const r = await api.joinGame(g.code, p); navigate(`/game/${r.id}`); }
@@ -143,7 +140,6 @@ export default function HomePage() {
   const previewUrl = avatarUrl(configToSeed(avatarConfig));
 
   function handleCustomizeClick() {
-    window.triggerPopunder?.();
     setCustomizerOpen(true);
   }
 
@@ -315,7 +311,6 @@ export default function HomePage() {
           <div className="mt-10 text-center">
             <Link 
               to="/how-to-play" 
-              onClick={() => window.triggerPopunder?.()}
               className="text-sm underline opacity-80"
             >
               Learn how to play →
@@ -381,38 +376,4 @@ export default function HomePage() {
                 <EmojiIcon size={20} color="#fbbf24" />
               </button>
               <input value={chatInput} onChange={e => setChatInput(e.target.value)} maxLength={200}
-                placeholder="Message the saloon…"
-                className="flex-1 bg-white/5 border border-amber-200/10 rounded-xl px-4 py-2 text-xs text-amber-50 placeholder-amber-200/20 outline-none focus:border-amber-500/40 focus:bg-white/8 transition-all font-sans" />
-              <button type="submit" disabled={!chatInput.trim()}
-                className="w-9 h-9 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-30 flex items-center justify-center flex-shrink-0 shadow-lg shadow-amber-500/20 transition-all active:scale-95">
-                <SendIcon size={18} color="#fff" />
-              </button>
-            </form>
-          </div>
-        )}
-        <button onClick={() => setChatOpen(o => !o)}
-          className="relative w-12 h-12 rounded-full flex items-center justify-center border border-amber-200/20 shadow-xl transition-all hover:scale-105 active:scale-95"
-          style={{ background: chatOpen ? "rgba(251,191,36,0.18)" : "rgba(10,6,4,0.82)", backdropFilter: "blur(12px)" }}>
-          <GlobeIcon size={22} color={chatOpen ? "#fbbf24" : "#fbbf2466"} />
-          {!chatOpen && chatUnread > 0 && (
-            <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-amber-500 border-2 border-black flex items-center justify-center text-[9px] font-bold text-white">
-              {chatUnread > 9 ? "9+" : chatUnread}
-            </div>
-          )}
-        </button>
-      </div>
-    </main>
-  );
-}
-
-function Feature({ Icon, title, desc }: { Icon: React.ComponentType<{ size?: number; color?: string }>; title: string; desc: string }) {
-  return (
-    <div className="bg-card/80 backdrop-blur border border-border rounded-xl p-4 shadow-card">
-      <div className="mb-2">
-        <Icon size={32} color="#fbbf24" />
-      </div>
-      <div className="font-display text-lg">{title}</div>
-      <p className="text-sm" style={{ color: "oklch(0.85 0.04 70)" }}>{desc}</p>
-    </div>
-  );
-}
+                placeholder="Message the sal
