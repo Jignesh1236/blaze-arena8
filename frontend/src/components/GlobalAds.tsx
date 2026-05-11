@@ -1,13 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 
-// Declare global function type
-declare global {
-  interface Window {
-    triggerPopunder: (probability?: number) => void;
-  }
-}
-
 export function GlobalAds() {
   const location = useLocation();
   const isAllowedPage = location.pathname === "/" || location.pathname === "/how-to-play";
@@ -15,25 +8,21 @@ export function GlobalAds() {
 
   // AdBlock Detection
   useEffect(() => {
-    // We check once per session
     if (sessionStorage.getItem("blazing8s_adblock_check")) return;
 
     const checkAdBlock = async () => {
       let isBlocked = false;
       
-      // Method 1: Try to fetch a common ad script
       try {
-        const response = await fetch("https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js", {
+        await fetch("https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js", {
           method: "HEAD",
           mode: "no-cors",
         });
-        // If the fetch is blocked, it might throw or return a status that indicates blocking
       } catch (e) {
         isBlocked = true;
       }
 
       if (isBlocked) {
-        // Delay slightly for better UX
         setTimeout(() => {
           setShowAdBlockModal(true);
           sessionStorage.setItem("blazing8s_adblock_check", "done");
@@ -50,7 +39,6 @@ export function GlobalAds() {
 
     const scriptUrl = "https://pl29360580.profitablecpmratenetwork.com/d9/e7/dd/d9e7dd33439880ec8757779e00d18aac.js";
     
-    // Use a global flag to ensure it only runs ONCE ever per page load
     if ((window as any)._notificationAdInjected) return;
     (window as any)._notificationAdInjected = true;
 
@@ -59,40 +47,6 @@ export function GlobalAds() {
     s.async = true;
     s.setAttribute("data-ad", "notification");
     document.body.appendChild(s);
-  }, [isAllowedPage]);
-
-  // Popunder Logic
-  useEffect(() => {
-    const popunderUrl = "https://pl29360324.profitablecpmratenetwork.com/47/48/c6/4748c62e293f43488f91677c7fb2ca4d.js";
-
-    const injectPopunder = () => {
-      if (!isAllowedPage) return;
-
-      console.log("[Ads] Injecting popunder script...");
-      const s = document.createElement("script");
-      s.src = popunderUrl;
-      document.head.appendChild(s);
-      
-      setTimeout(() => {
-        try { document.head.removeChild(s); } catch(e) {}
-      }, 1000);
-    };
-
-    // Global trigger for clicks
-    window.triggerPopunder = (probability: number = 1) => {
-      // If probability is passed, still respect it, but we'll call it with 1 by default
-      if (probability > 0 && Math.random() > probability) return;
-      injectPopunder();
-    };
-
-    // "Default" behavior: Run once on mount automatically if on allowed page
-    if (isAllowedPage) {
-      injectPopunder();
-    }
-
-    return () => {
-      // Keep it global
-    };
   }, [isAllowedPage]);
 
   return (
@@ -114,6 +68,24 @@ export function GlobalAds() {
             </h3>
             
             <p className="text-amber-100/80 text-center leading-relaxed mb-8">
+              Hey partner! We noticed you're using an ad blocker. Ads help us keep the servers running and the game free for everyone. 
+              <br/><br/>
+              If you enjoy playing, please consider whitelisting us. It really helps!
+            </p>
+            
+            <button
+              onClick={() => setShowAdBlockModal(false)}
+              className="w-full h-12 bg-amber-500 hover:bg-amber-400 text-white font-display rounded-xl transition-all shadow-lg shadow-amber-500/20 active:scale-95"
+            >
+              Got it, thanks!
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+            }
+<p className="text-amber-100/80 text-center leading-relaxed mb-8">
               Hey partner! We noticed you're using an ad blocker. Ads help us keep the servers running and the game free for everyone. 
               <br/><br/>
               If you enjoy playing, please consider whitelisting us. It really helps!
